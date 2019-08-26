@@ -1,6 +1,7 @@
 import torch
 import torch.nn.functional as F
 from torch import nn
+from torch.distributions import Normal
 
 
 class VAE(nn.Module):
@@ -28,9 +29,9 @@ class VAE(nn.Module):
         return self.encode_mu(out), self.encode_logvar(out)
 
     def reparameterize(self, mu, logvar):
-        std = torch.exp(0.5 * logvar)
-        eps = torch.randn_like(std)
-        return mu + eps * std
+        std = logvar.mul(0.5).exp_()
+        q = Normal(mu, std)
+        return q.rsample()
 
     def decode(self, z):
         out = self.decoder1(z)

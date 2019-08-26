@@ -40,7 +40,7 @@ def parse_args():
                         type=str,
                         help='Dataset to use')
     parser.add_argument('--data-root',
-                        default='.data',
+                        default='data',
                         type=str,
                         help='Dataset root to store')
 
