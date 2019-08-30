@@ -84,24 +84,21 @@ def main():
     test_loader = DataLoader(data['test'], args.batch_size, **kwargs)
     optimizer = Adam(model.parameters(), lr=args.learning_rate)
 
-    def get_elbo(recon, x, mu, logvar):
+    def get_recon_error(recon, x):
         b, *xdims = x.shape
-        bce = F.binary_cross_entropy(recon.view(b, -1), x.view(b, -1), reduction='sum')
-        # see Appendix B from VAE paper:
-        # Kingma and Welling. Auto-Encoding Variational Bayes. ICLR, 2014
-        # https://arxiv.org/abs/1312.6114
-        # 0.5 * sum(1 + log(sigma^2) - mu^2 - sigma^2)
-        kl = 0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp())
-        return bce, kl
+        bce = F.binary_cross_entropy(recon.view(b, -1),
+                                     x.view(b, -1),
+                                     reduction='sum')
+        return bce
 
     def step(engine, batch):
         model.train()
         x, _ = batch
         x = x.to(device)
 
-        recon, mu, logvar = model(x)
+        recon, kl = model(x)
 
-        recon_error, kl = get_elbo(recon, x, mu, logvar)
+        recon_error = get_recon_error(recon, x)
 
         elbo = -recon_error + kl
         loss = -elbo
@@ -114,8 +111,6 @@ def main():
             'elbo': elbo.item(),
             'recon_error': recon_error.item(),
             'kl': kl.item(),
-            'mu': mu,
-            'logvar': logvar,
             'lr': lr
         }
 
@@ -140,8 +135,8 @@ def main():
         with torch.no_grad():
             for i, (x, _) in enumerate(test_loader):
                 x = x.to(device)
-                recon, mu, logvar = model(x)
-                recon_error, kl = get_elbo(recon, x, mu, logvar)
+                recon, kl = model(x)
+                recon_error = get_recon_error(recon, x)
                 elbo = -recon_error + kl
 
                 val_elbo += elbo
@@ -152,7 +147,8 @@ def main():
                     row = 8
                     n = min(x.shape[0], row)
                     comparison = torch.cat([x[:n], recon[:n]])
-                    grid = make_grid(comparison.detach().cpu().float(), nrow=row)
+                    grid = make_grid(comparison.detach().cpu().float(),
+                                     nrow=row)
                     writer.add_image('val/reconstruction', grid,
                                      engine.state.iteration)
             val_elbo /= len(test_loader.dataset)

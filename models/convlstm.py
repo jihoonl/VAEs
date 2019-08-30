@@ -28,7 +28,7 @@ class Conv2dLSTMCell(nn.Module):
 
         i = torch.cat((hidden, input_), dim=1)
         combined = self.combined_conv(i)
-        c_forget, c_input, c_output, c_state = torch.split(combined, 4, dim=1)
+        c_forget, c_input, c_output, c_state = torch.chunk(combined, 4, dim=1)
         forget_gate = torch.sigmoid(c_forget)
         input_gate = torch.sigmoid(c_input)
         output_gate = torch.sigmoid(c_output)
