@@ -6,12 +6,11 @@ from torch.distributions import Normal
 
 class VAE(nn.Module):
 
-    def __init__(self, d, w, h):
+    def __init__(self, d, w, h, zdim=20):
         super(VAE, self).__init__()
 
         self.stem = nn.Linear(w * h, 400)
-        self.encode_mu = nn.Linear(400, 20)
-        self.encode_logvar = nn.Linear(400, 20)
+        self.gaussian = nn.Linear(400, zdim * 2)
 
         self.decoder1 = nn.Linear(20, 400)
         self.decoder2 = nn.Linear(400, w * h)
@@ -32,7 +31,8 @@ class VAE(nn.Module):
     def encode(self, x):
         out = self.stem(x)
         out = F.relu(out)
-        return self.encode_mu(out), self.encode_logvar(out)
+        mu, logvar = torch.chunk(self.gaussian(out), 2, dim=1)
+        return mu, logvar
 
     def reparameterize(self, mu, logvar):
         std = logvar.mul(0.5).exp_()

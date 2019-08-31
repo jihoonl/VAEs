@@ -43,11 +43,15 @@ def parse_args():
                         default='data',
                         type=str,
                         help='Dataset root to store')
-
     parser.add_argument('--log-root-dir',
-                        default='log',
+                        default='/data/private/exp/mnist_vae',
                         type=str,
                         help='log root')
+    parser.add_argument('--log-interval',
+                        default=50,
+                        type=int,
+                        help='log root')
+
     return parser.parse_args()
 
 
@@ -107,22 +111,27 @@ def main():
         loss.backward()
         optimizer.step()
         lr = optimizer.param_groups[0]['lr']
-        return {
+        ret = {
             'elbo': elbo.item(),
             'recon_error': recon_error.item(),
             'kl': kl.item(),
             'lr': lr
         }
+        return ret
 
     trainer = Engine(step)
-    metric_names = ['elbo', 'll', 'kl', 'mu', 'logvar', 'lr']
+    metric_names = ['elbo', 'recon_error', 'kl', 'lr']
 
-    for m in metric_names:
-        RunningAverage(output_transform=lambda x: x[m]).attach(trainer, m)
+    RunningAverage(output_transform=lambda x: x['elbo']).attach(trainer, 'elbo')
+    RunningAverage(output_transform=lambda x: x['recon_error']).attach(
+        trainer, 'recon_error')
+    RunningAverage(output_transform=lambda x: x['kl']).attach(trainer, 'kl')
+    RunningAverage(output_transform=lambda x: x['lr']).attach(trainer, 'lr')
+
     ProgressBar().attach(trainer, metric_names=metric_names)
     Timer(average=True).attach(trainer)
 
-    add_events(trainer, model, writer, logdir)
+    add_events(trainer, model, writer, logdir, args.log_interval)
 
     @trainer.on(Events.EPOCH_COMPLETED)
     def validate(engine):

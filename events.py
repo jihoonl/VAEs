@@ -3,15 +3,16 @@ from utils import num_gpus
 from ignite.engine import Events
 from ignite.handlers import ModelCheckpoint
 
-def log_metrics(engine, writer):
+def log_metrics(engine, writer, interval):
     for k, v in engine.state.metrics.items():
         writer.add_scalar('training/{}'.format(k), v, engine.state.iteration)
 
 
-def add_events(trainer, model, writer, logdir):
+def add_events(trainer, model, writer, logdir, interval):
     trainer.add_event_handler(event_name=Events.ITERATION_COMPLETED,
                               handler=log_metrics,
-                              writer=writer)
+                              writer=writer,
+                              interval=interval)
 
     checkpoint_handler = ModelCheckpoint(logdir + '/checkpoints',
                                          'epoch',
