@@ -43,6 +43,10 @@ def parse_args():
                         default='data',
                         type=str,
                         help='Dataset root to store')
+    parser.add_argument('--zdim',
+                        default=20,
+                        type=int,
+                        help='latent space dimension')
     parser.add_argument('--log-root-dir',
                         default='/data/private/exp/mnist_vae',
                         type=str,
@@ -65,7 +69,7 @@ def main():
 
     dims = list(data1.shape)
 
-    model = get_model(args.model, *dims)
+    model = get_model(args.model, args.zdim, *dims)
 
     model = torch.nn.DataParallel(model) if num_gpus > 1 else model
     model.to(device)

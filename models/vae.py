@@ -12,7 +12,7 @@ class VAE(nn.Module):
         self.stem = nn.Linear(w * h, 400)
         self.gaussian = nn.Linear(400, zdim * 2)
 
-        self.decoder1 = nn.Linear(20, 400)
+        self.decoder1 = nn.Linear(zdim, 400)
         self.decoder2 = nn.Linear(400, w * h)
 
     def forward(self, x):
@@ -30,7 +30,7 @@ class VAE(nn.Module):
 
     def encode(self, x):
         out = self.stem(x)
-        out = F.relu(out)
+        out = F.elu(out)
         mu, logvar = torch.chunk(self.gaussian(out), 2, dim=1)
         return mu, logvar
 
