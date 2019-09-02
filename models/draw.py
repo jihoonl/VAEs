@@ -1,12 +1,14 @@
 import torch
 from torch import nn
-from .convlstm import Conv2dLSTMCell
 from torch.distributions import Normal
+
+from .convlstm import Conv2dLSTMCell
 
 
 class Draw(nn.Module):
     """
-    DRAW: A Recurrent Neural Network For Image Generation - http://arxiv.org/pdf/1502.04623v2.pdf
+    DRAW: A Recurrent Neural Network For Image Generation
+    - http://arxiv.org/pdf/1502.04623v2.pdf
     Implementation based on Eric Jang's code
     """
 
@@ -24,6 +26,17 @@ class Draw(nn.Module):
         self.sampler = nn.Linear(hdim, zdim * 2)
         self.encoder = nn.LSTMCell(xdim * height * width * 2 + hdim, hdim)
         self.decoder = nn.LSTMCell(zdim, hdim)
+
+        self.init_weights()
+
+    def init_weights(self):
+        for m in self.modules():
+            if isinstance(m, nn.Conv2d):
+                nn.init.kaiming_normal_(m.weight,
+                                        mode='fan_out',
+                                        nonlinearity='relu')
+                if hasattr(m.weight, 'bias') and m.weight.bias is not None:
+                    nn.init.constant_(m.weight.bias, 0)
 
     def forward(self, x):
         hdim, T = self.hdim, self.T
@@ -62,7 +75,7 @@ class Draw(nn.Module):
 
     def sample_q(self, h):
         mu, logvar = torch.chunk(self.sampler(h), 2, dim=1)
-        q = Normal(mu, logvar.mul(0.5).exp_())
+        q = Normal(mu, logvar.mul(0.5).exp())
         return q.rsample(), mu, logvar
 
     def read_no_attention(self, x, x_hat, h_dec):

@@ -26,8 +26,9 @@ def set_debug(debug=True):
 def get_logdir_name(args):
     t = time.strftime('%b%d-%H%M')
     c = dict(model=args.model,
-             zdim=args.zdim,
+             z=args.zdim,
              batch_size=args.batch_size,
+             epoch=args.epoch,
              num_gpu=num_gpus,
              lr=args.learning_rate)
     config = '_'.join(['{}{}'.format(k, str(v)) for k, v in c.items()])

@@ -4,13 +4,13 @@ import os
 
 # Ignite
 import torch
+from torch.distributions import Bernoulli, Normal
 import torch.nn.functional as F
 from ignite.contrib.handlers import ProgressBar
 from ignite.engine import Engine, Events
 from ignite.handlers import Timer
 from ignite.metrics import RunningAverage
 from tensorboardX import SummaryWriter
-from torch.optim import Adam
 from torch.utils.data import DataLoader
 from torchvision.utils import make_grid
 
@@ -44,17 +44,14 @@ def parse_args():
                         type=str,
                         help='Dataset root to store')
     parser.add_argument('--zdim',
-                        default=20,
+                        default=10,
                         type=int,
                         help='latent space dimension')
     parser.add_argument('--log-root-dir',
                         default='/data/private/exp/mnist_vae',
                         type=str,
                         help='log root')
-    parser.add_argument('--log-interval',
-                        default=50,
-                        type=int,
-                        help='log root')
+    parser.add_argument('--log-interval', default=50, type=int, help='log root')
 
     return parser.parse_args()
 
@@ -69,7 +66,8 @@ def main():
 
     dims = list(data1.shape)
 
-    model = get_model(args.model, args.zdim, *dims)
+    model, optimizer = get_model(args.model, args.learning_rate, args.zdim,
+                                 *dims)
 
     model = torch.nn.DataParallel(model) if num_gpus > 1 else model
     model.to(device)
@@ -90,14 +88,16 @@ def main():
     train_loader = DataLoader(data['train'], args.batch_size, **kwargs)
     kwargs['shuffle'] = False
     test_loader = DataLoader(data['test'], args.batch_size, **kwargs)
-    optimizer = Adam(model.parameters(), lr=args.learning_rate)
 
     def get_recon_error(recon, x):
+        """
         b, *xdims = x.shape
         bce = F.binary_cross_entropy(recon.view(b, -1),
                                      x.view(b, -1),
                                      reduction='sum')
-        return bce
+        """
+        ll = Bernoulli(recon).log_prob(x)
+        return -ll.sum()
 
     def step(engine, batch):
         model.train()
@@ -108,11 +108,13 @@ def main():
 
         recon_error = get_recon_error(recon, x)
 
-        elbo = -recon_error + kl
-        loss = -elbo
+        loss = recon_error + kl
+        elbo = -loss
 
         optimizer.zero_grad()
         loss.backward()
+        torch.nn.utils.clip_grad_norm_(model.parameters(), 5.0)
+
         optimizer.step()
         lr = optimizer.param_groups[0]['lr']
         ret = {

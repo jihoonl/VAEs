@@ -35,7 +35,7 @@ class VAE(nn.Module):
         return mu, logvar
 
     def reparameterize(self, mu, logvar):
-        std = logvar.mul(0.5).exp_()
+        std = logvar.mul(0.5).exp()
         q = Normal(mu, std)
         return q.rsample()
 
@@ -44,3 +44,7 @@ class VAE(nn.Module):
         out = F.relu(out)
         out = self.decoder2(out)
         return torch.sigmoid(out)
+
+
+
+
