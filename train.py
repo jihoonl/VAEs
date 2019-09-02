@@ -4,13 +4,13 @@ import os
 
 # Ignite
 import torch
+from torch.distributions import Bernoulli, Normal
 import torch.nn.functional as F
 from ignite.contrib.handlers import ProgressBar
 from ignite.engine import Engine, Events
 from ignite.handlers import Timer
 from ignite.metrics import RunningAverage
 from tensorboardX import SummaryWriter
-from torch.optim import Adam
 from torch.utils.data import DataLoader
 from torchvision.utils import make_grid
 
@@ -43,11 +43,16 @@ def parse_args():
                         default='data',
                         type=str,
                         help='Dataset root to store')
-
+    parser.add_argument('--zdim',
+                        default=10,
+                        type=int,
+                        help='latent space dimension')
     parser.add_argument('--log-root-dir',
-                        default='log',
+                        default='/data/private/exp/mnist_vae',
                         type=str,
                         help='log root')
+    parser.add_argument('--log-interval', default=50, type=int, help='log root')
+
     return parser.parse_args()
 
 
@@ -61,7 +66,8 @@ def main():
 
     dims = list(data1.shape)
 
-    model = get_model(args.model, *dims)
+    model, optimizer = get_model(args.model, args.learning_rate, args.zdim,
+                                 *dims)
 
     model = torch.nn.DataParallel(model) if num_gpus > 1 else model
     model.to(device)
@@ -82,52 +88,56 @@ def main():
     train_loader = DataLoader(data['train'], args.batch_size, **kwargs)
     kwargs['shuffle'] = False
     test_loader = DataLoader(data['test'], args.batch_size, **kwargs)
-    optimizer = Adam(model.parameters(), lr=args.learning_rate)
 
-    def get_elbo(recon, x, mu, logvar):
+    def get_recon_error(recon, x):
+        """
         b, *xdims = x.shape
-        bce = F.binary_cross_entropy(recon.view(b, -1), x.view(b, -1), reduction='sum')
-        # see Appendix B from VAE paper:
-        # Kingma and Welling. Auto-Encoding Variational Bayes. ICLR, 2014
-        # https://arxiv.org/abs/1312.6114
-        # 0.5 * sum(1 + log(sigma^2) - mu^2 - sigma^2)
-        kl = 0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp())
-        return bce, kl
+        bce = F.binary_cross_entropy(recon.view(b, -1),
+                                     x.view(b, -1),
+                                     reduction='sum')
+        """
+        ll = Bernoulli(recon).log_prob(x)
+        return -ll.sum()
 
     def step(engine, batch):
         model.train()
         x, _ = batch
         x = x.to(device)
 
-        recon, mu, logvar = model(x)
+        recon, kl = model(x)
 
-        recon_error, kl = get_elbo(recon, x, mu, logvar)
+        recon_error = get_recon_error(recon, x)
 
-        elbo = -recon_error + kl
-        loss = -elbo
+        loss = recon_error + kl
+        elbo = -loss
 
         optimizer.zero_grad()
         loss.backward()
+        torch.nn.utils.clip_grad_norm_(model.parameters(), 5.0)
+
         optimizer.step()
         lr = optimizer.param_groups[0]['lr']
-        return {
+        ret = {
             'elbo': elbo.item(),
             'recon_error': recon_error.item(),
             'kl': kl.item(),
-            'mu': mu,
-            'logvar': logvar,
             'lr': lr
         }
+        return ret
 
     trainer = Engine(step)
-    metric_names = ['elbo', 'll', 'kl', 'mu', 'logvar', 'lr']
+    metric_names = ['elbo', 'recon_error', 'kl', 'lr']
 
-    for m in metric_names:
-        RunningAverage(output_transform=lambda x: x[m]).attach(trainer, m)
+    RunningAverage(output_transform=lambda x: x['elbo']).attach(trainer, 'elbo')
+    RunningAverage(output_transform=lambda x: x['recon_error']).attach(
+        trainer, 'recon_error')
+    RunningAverage(output_transform=lambda x: x['kl']).attach(trainer, 'kl')
+    RunningAverage(output_transform=lambda x: x['lr']).attach(trainer, 'lr')
+
     ProgressBar().attach(trainer, metric_names=metric_names)
     Timer(average=True).attach(trainer)
 
-    add_events(trainer, model, writer, logdir)
+    add_events(trainer, model, writer, logdir, args.log_interval)
 
     @trainer.on(Events.EPOCH_COMPLETED)
     def validate(engine):
@@ -140,8 +150,8 @@ def main():
         with torch.no_grad():
             for i, (x, _) in enumerate(test_loader):
                 x = x.to(device)
-                recon, mu, logvar = model(x)
-                recon_error, kl = get_elbo(recon, x, mu, logvar)
+                recon, kl = model(x)
+                recon_error = get_recon_error(recon, x)
                 elbo = -recon_error + kl
 
                 val_elbo += elbo
@@ -152,7 +162,8 @@ def main():
                     row = 8
                     n = min(x.shape[0], row)
                     comparison = torch.cat([x[:n], recon[:n]])
-                    grid = make_grid(comparison.detach().cpu().float(), nrow=row)
+                    grid = make_grid(comparison.detach().cpu().float(),
+                                     nrow=row)
                     writer.add_image('val/reconstruction', grid,
                                      engine.state.iteration)
             val_elbo /= len(test_loader.dataset)
