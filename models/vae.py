@@ -24,8 +24,8 @@ class VAE(nn.Module):
         # see Appendix B from VAE paper:
         # Kingma and Welling. Auto-Encoding Variational Bayes. ICLR, 2014
         # https://arxiv.org/abs/1312.6114
-        # 0.5 * sum(1 + log(sigma^2) - mu^2 - sigma^2)
-        kl = 0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp())
+        # -0.5 * sum(1 + log(sigma^2) - mu^2 - sigma^2)
+        kl = -0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp())
         return recon.view(x.shape), kl
 
     def encode(self, x):
@@ -44,7 +44,3 @@ class VAE(nn.Module):
         out = F.relu(out)
         out = self.decoder2(out)
         return torch.sigmoid(out)
-
-
-
-

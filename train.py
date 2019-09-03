@@ -90,12 +90,6 @@ def main():
     test_loader = DataLoader(data['test'], args.batch_size, **kwargs)
 
     def get_recon_error(recon, x):
-        """
-        b, *xdims = x.shape
-        bce = F.binary_cross_entropy(recon.view(b, -1),
-                                     x.view(b, -1),
-                                     reduction='sum')
-        """
         ll = Bernoulli(recon).log_prob(x)
         return -ll.sum()
 
@@ -106,9 +100,8 @@ def main():
 
         recon, kl = model(x)
 
-        recon_error = get_recon_error(recon, x)
-
-        loss = recon_error + kl
+        nll = get_recon_error(recon, x)
+        loss = nll + kl
         elbo = -loss
 
         optimizer.zero_grad()
@@ -119,18 +112,18 @@ def main():
         lr = optimizer.param_groups[0]['lr']
         ret = {
             'elbo': elbo.item(),
-            'recon_error': recon_error.item(),
+            'nll': nll.item(),
             'kl': kl.item(),
             'lr': lr
         }
         return ret
 
     trainer = Engine(step)
-    metric_names = ['elbo', 'recon_error', 'kl', 'lr']
+    metric_names = ['elbo', 'nll', 'kl', 'lr']
 
     RunningAverage(output_transform=lambda x: x['elbo']).attach(trainer, 'elbo')
-    RunningAverage(output_transform=lambda x: x['recon_error']).attach(
-        trainer, 'recon_error')
+    RunningAverage(output_transform=lambda x: x['nll']).attach(
+        trainer, 'nll')
     RunningAverage(output_transform=lambda x: x['kl']).attach(trainer, 'kl')
     RunningAverage(output_transform=lambda x: x['lr']).attach(trainer, 'lr')
 
@@ -145,18 +138,19 @@ def main():
 
         val_elbo = 0
         val_kl = 0
-        val_recon_error = 0
+        val_nll = 0
 
         with torch.no_grad():
             for i, (x, _) in enumerate(test_loader):
                 x = x.to(device)
                 recon, kl = model(x)
-                recon_error = get_recon_error(recon, x)
-                elbo = -recon_error + kl
+                nll = get_recon_error(recon, x)
+                loss = nll + kl
+                elbo = -loss
 
                 val_elbo += elbo
                 val_kl += kl
-                val_recon_error += recon_error
+                val_nll += nll
                 if i == 0:
                     batch, *xdims = x.shape
                     row = 8
@@ -168,11 +162,11 @@ def main():
                                      engine.state.iteration)
             val_elbo /= len(test_loader.dataset)
             val_kl /= len(test_loader.dataset)
-            val_recon_error /= len(test_loader.dataset)
+            val_nll /= len(test_loader.dataset)
             writer.add_scalar('val/elbo', val_elbo.item(),
                               engine.state.iteration)
             writer.add_scalar('val/kl', val_kl.item(), engine.state.iteration)
-            writer.add_scalar('val/recon_error', val_recon_error.item(),
+            writer.add_scalar('val/nll', val_nll.item(),
                               engine.state.iteration)
 
     @trainer.on(Events.EXCEPTION_RAISED)
