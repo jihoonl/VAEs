@@ -27,15 +27,18 @@ class Draw(nn.Module):
             self.write_n = 5
             self.write_attn_window = nn.Linear(self.hdim, 5)
             self.write = self.write_attention
+            self.encoder = nn.LSTMCell(
+                xdim * self.read_n * self.read_n * 2 + hdim, hdim)
+            self.write_fc = nn.Linear(hdim, xdim * self.write_n * self.write_n)
         else:
             self.read = self.read_no_attention
             self.write = self.write_no_attention
+            self.encoder = nn.LSTMCell(xdim * height * width * 2 + hdim, hdim)
             self.write_fc = nn.Linear(hdim, xdim * height * width)
 
         self.T = T
 
         self.sampler = nn.Linear(hdim, zdim * 2)
-        self.encoder = nn.LSTMCell(xdim * height * width * 2 + hdim, hdim)
         self.decoder = nn.LSTMCell(zdim, hdim)
 
         self.init_weights()
@@ -54,7 +57,7 @@ class Draw(nn.Module):
         batch, d, h, w = x.shape
         # x_flatten = x.view(batch, -1)
 
-        canvas = x.new_zeros((batch, d * h * w))
+        canvas = x.new_zeros((batch, d, h, w))
 
         c_enc = x.new_zeros((batch, hdim))
         h_enc = x.new_zeros((batch, hdim))
@@ -94,18 +97,19 @@ class Draw(nn.Module):
         return torch.cat([x.view(batch, -1), x_hat.view(batch, -1)], 1)
 
     def write_no_attention(self, h_dec, shape):
-        return self.write_fc(h_dec)
+        return self.write_fc(h_dec).view(shape)
 
     def read_attention(self, x, x_hat, h_dec, shape):
         batch, d, h, w = shape
-        Fx, Fy, gamma = self.attn_window(h_dec, self.read_n,
-                                         self.read_attn_window, w, h)
+        (Fx, Fy), gamma = self.attn_window(h_dec, self.read_n,
+                                           self.read_attn_window, w, h)
 
         Fx = Fx.repeat(1, d, 1, 1)
         Fy = Fy.repeat(1, d, 1, 1)
 
         def filter_img(img, Fx, Fy, gamma, N):
-            glimpse = torch.matmul(Fy, torch.matmul(img, Fx))
+            xFx = torch.matmul(img, Fx.permute(0, 1, 3, 2))
+            glimpse = torch.matmul(Fy, xFx)
             glimpse = glimpse.view(-1, self.read_n * self.read_n)
             return glimpse * gamma.view(-1, 1).expand_as(glimpse)
 
@@ -116,8 +120,16 @@ class Draw(nn.Module):
 
     def write_attention(self, h_dec, shape):
         batch, d, h, w = shape
-        Fx, Fy, gamma = self.attn_window(h_dec, self.write_n,
-                                         self.write_attn_window, w, h)
+
+        Wt = self.write_fc(h_dec).view(batch, d, self.write_n, self.write_n)
+        (Fx, Fy), gamma = self.attn_window(h_dec, self.write_n,
+                                           self.write_attn_window, w, h)
+
+        Fyt = Fy.permute(0, 1, 3, 2)
+        WtFx = torch.matmul(Wt, Fx)
+        wr = torch.matmul(Fyt, WtFx)
+        wr = wr.view(batch, -1)
+        return (wr / gamma.view(-1, 1).expand_as(wr)).view(shape)
 
     def attn_window(self, h_dec, N, W, A, B):
         # (\tilde{g}_X, \tilde{g}_Y, log\sigma^2, log\tilde\delta, log\gamma = \
@@ -137,7 +149,7 @@ class Draw(nn.Module):
 
         # \mu^i_X=g_X+(i-N/2 - 0.5)\delta
         # \mu^i_Y=g_Y+(j-N/2 - 0.5)\delta
-        grid_i = torch.arange(end=N).to(device).view(1, -1)
+        grid_i = torch.arange(end=N).float().to(device).view(1, -1)
 
         mu_x = gx + (grid_i - N / 2 - 0.5) * delta
         mu_y = gy + (grid_i - N / 2 - 0.5) * delta
@@ -145,8 +157,8 @@ class Draw(nn.Module):
         mu_y = mu_y.view(-1, N, 1)
         var = var.view(-1, 1, 1)
 
-        a = torch.arange(end=A).to(device).view(1, 1, -1)
-        b = torch.arange(end=B).to(device).view(1, 1, -1)
+        a = torch.arange(end=A).float().to(device).view(1, 1, -1)
+        b = torch.arange(end=B).float().to(device).view(1, 1, -1)
 
         # F_X[i,a] = {1\over Z_X}exp\Big(-{(a-\mu^i_X)^2 \over 2\sigma^2}\Big)
         # F_X[j,b] = {1\over Z_Y}exp\Big(-{(a-\mu^j_Y)^2 \over 2\sigma^2}\Big)
