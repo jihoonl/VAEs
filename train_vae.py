@@ -83,7 +83,7 @@ def main():
         'num_workers': num_gpus * 4
     }
 
-    logdir = get_logdir_name(args)
+    logdir = get_logdir_name(args, param)
     logger.info('Log Dir: {}'.format(logdir))
     writer = SummaryWriter(logdir)
 
