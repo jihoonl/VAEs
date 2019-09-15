@@ -23,14 +23,15 @@ def set_debug(debug=True):
         logger.setLevel(logging.INFO)
 
 
-def get_logdir_name(args):
+def get_logdir_name(args, param):
     t = time.strftime('%b%d-%H%M')
     c = dict(model=args.model,
-             z=args.zdim,
              batch_size=args.batch_size,
              epoch=args.epoch,
              num_gpu=num_gpus,
-             lr=args.learning_rate)
+             lr=args.learning_rate,
+             )
+    c.update(param)
     config = '_'.join(['{}{}'.format(k, str(v)) for k, v in c.items()])
     dirpath = os.path.join(args.log_root_dir, config, t)
     return dirpath

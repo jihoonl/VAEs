@@ -43,15 +43,31 @@ def parse_args():
                         default='data',
                         type=str,
                         help='Dataset root to store')
-    parser.add_argument('--zdim',
-                        default=10,
-                        type=int,
-                        help='latent space dimension')
+
     parser.add_argument('--log-root-dir',
                         default='/data/private/exp/mnist_vae',
                         type=str,
                         help='log root')
     parser.add_argument('--log-interval', default=50, type=int, help='log root')
+
+    # DRAW model
+    parser.add_argument('--zdim',
+                        default=10,
+                        type=int,
+                        help='latent space dimension')
+
+    parser.add_argument('--hdim',
+                        type=int,
+                        default=256,
+                        help='LSTM Hidden dimension')
+    parser.add_argument('--glimpse',
+                        type=int,
+                        default=10,
+                        help='Number of glimpse')
+    parser.add_argument('--attention',
+                        action='store_true',
+                        help='Enable draw attention',
+                        default=False)
 
     return parser.parse_args()
 
@@ -65,9 +81,11 @@ def main():
     data1, _ = data['train'][0]
 
     dims = list(data1.shape)
-
-    model, optimizer = get_model(args.model, args.learning_rate, args.zdim,
-                                 *dims)
+    param = dict(zdim=args.zdim,
+                 hdim=args.hdim,
+                 glimpse=args.glimpse,
+                 attention=args.attention)
+    model, optimizer = get_model(args.model, args.learning_rate, param, *dims)
 
     model = torch.nn.DataParallel(model) if num_gpus > 1 else model
     model.to(device)
@@ -79,7 +97,7 @@ def main():
         'num_workers': num_gpus * 4
     }
 
-    logdir = get_logdir_name(args)
+    logdir = get_logdir_name(args, param)
     logger.info('Log Dir: {}'.format(logdir))
     writer = SummaryWriter(logdir)
 
@@ -111,9 +129,9 @@ def main():
         optimizer.step()
         lr = optimizer.param_groups[0]['lr']
         ret = {
-            'elbo': elbo.item(),
-            'nll': nll.item(),
-            'kl': kl.item(),
+            'elbo': elbo.item() / len(x),
+            'nll': nll.item() / len(x),
+            'kl': kl.item() / len(x),
             'lr': lr
         }
         return ret
@@ -122,8 +140,7 @@ def main():
     metric_names = ['elbo', 'nll', 'kl', 'lr']
 
     RunningAverage(output_transform=lambda x: x['elbo']).attach(trainer, 'elbo')
-    RunningAverage(output_transform=lambda x: x['nll']).attach(
-        trainer, 'nll')
+    RunningAverage(output_transform=lambda x: x['nll']).attach(trainer, 'nll')
     RunningAverage(output_transform=lambda x: x['kl']).attach(trainer, 'kl')
     RunningAverage(output_transform=lambda x: x['lr']).attach(trainer, 'lr')
 
@@ -166,8 +183,10 @@ def main():
             writer.add_scalar('val/elbo', val_elbo.item(),
                               engine.state.iteration)
             writer.add_scalar('val/kl', val_kl.item(), engine.state.iteration)
-            writer.add_scalar('val/nll', val_nll.item(),
-                              engine.state.iteration)
+            writer.add_scalar('val/nll', val_nll.item(), engine.state.iteration)
+            print('{:3d} /{:3d} : ELBO: {:.4f}, KL: {:.4f}, NLL: {:.4f}'.format(
+                engine.state.epoch, engine.state.max_epochs, val_elbo, val_kl,
+                val_nll))
 
     @trainer.on(Events.EXCEPTION_RAISED)
     def handler_exception(engine, e):
