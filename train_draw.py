@@ -43,16 +43,27 @@ def parse_args():
                         default='data',
                         type=str,
                         help='Dataset root to store')
-    parser.add_argument('--zdim',
-                        default=10,
-                        type=int,
-                        help='latent space dimension')
+
     parser.add_argument('--log-root-dir',
                         default='/data/private/exp/mnist_vae',
                         type=str,
                         help='log root')
     parser.add_argument('--log-interval', default=50, type=int, help='log root')
 
+    # DRAW model
+    parser.add_argument('--zdim',
+                        default=10,
+                        type=int,
+                        help='latent space dimension')
+
+    parser.add_argument('--hdim',
+                        type=int,
+                        default=256,
+                        help='LSTM Hidden dimension')
+    parser.add_argument('--glimpse',
+                        type=int,
+                        default=10,
+                        help='Number of glimpse')
     parser.add_argument('--attention',
                         action='store_true',
                         help='Enable draw attention',
@@ -70,9 +81,11 @@ def main():
     data1, _ = data['train'][0]
 
     dims = list(data1.shape)
-
-    model, optimizer = get_model(args.model, args.learning_rate, args.attention,
-                                 args.zdim, *dims)
+    param = dict(zdim=args.zdim,
+                 hdim=args.hdim,
+                 glimpse=args.glimpse,
+                 attention=args.attention)
+    model, optimizer = get_model(args.model, args.learning_rate, param, *dims)
 
     model = torch.nn.DataParallel(model) if num_gpus > 1 else model
     model.to(device)

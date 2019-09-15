@@ -14,7 +14,14 @@ class Draw(nn.Module):
         and https://github.com/Natsu6767/Generating-Devanagari-Using-DRAW
     """
 
-    def __init__(self, xdim, height, width, hdim, zdim, T=10, attention=False):
+    def __init__(self,
+                 xdim,
+                 height,
+                 width,
+                 hdim,
+                 zdim,
+                 glimpse=10,
+                 attention=False):
         super(Draw, self).__init__()
         self.xdim = xdim
         self.hdim = hdim
@@ -36,7 +43,7 @@ class Draw(nn.Module):
             self.encoder = nn.LSTMCell(xdim * height * width * 2 + hdim, hdim)
             self.write_fc = nn.Linear(hdim, xdim * height * width)
 
-        self.T = T
+        self.T = glimpse
 
         self.sampler = nn.Linear(hdim, zdim * 2)
         self.decoder = nn.LSTMCell(zdim, hdim)
@@ -110,8 +117,8 @@ class Draw(nn.Module):
         def filter_img(img, Fx, Fy, gamma, N):
             xFx = torch.matmul(img, Fx.permute(0, 1, 3, 2))
             glimpse = torch.matmul(Fy, xFx)
-            glimpse = glimpse.view(-1, self.read_n * self.read_n)
-            return glimpse * gamma.view(-1, 1).expand_as(glimpse)
+            glimpse = glimpse.view(-1, d * self.read_n * self.read_n)
+            return glimpse * gamma.view(batch, -1).expand_as(glimpse)
 
         x = filter_img(x, Fx, Fy, gamma, self.read_n)
         x_hat = filter_img(x_hat.view(batch, d, h, w), Fx, Fy, gamma,
@@ -129,7 +136,7 @@ class Draw(nn.Module):
         WtFx = torch.matmul(Wt, Fx)
         wr = torch.matmul(Fyt, WtFx)
         wr = wr.view(batch, -1)
-        return (wr / gamma.view(-1, 1).expand_as(wr)).view(shape)
+        return (wr / gamma.view(batch, -1).expand_as(wr)).view(shape)
 
     def attn_window(self, h_dec, N, W, A, B):
         # (\tilde{g}_X, \tilde{g}_Y, log\sigma^2, log\tilde\delta, log\gamma = \

@@ -6,14 +6,14 @@ from torch.distributions import Normal
 
 class VAE(nn.Module):
 
-    def __init__(self, d, w, h, zdim=20):
+    def __init__(self, d, w, h, zdim=20, hdim=400):
         super(VAE, self).__init__()
 
-        self.stem = nn.Linear(w * h, 400)
-        self.gaussian = nn.Linear(400, zdim * 2)
+        self.stem = nn.Linear(d * w * h, hdim)
+        self.gaussian = nn.Linear(hdim, zdim * 2)
 
-        self.decoder1 = nn.Linear(zdim, 400)
-        self.decoder2 = nn.Linear(400, w * h)
+        self.decoder1 = nn.Linear(zdim, hdim)
+        self.decoder2 = nn.Linear(hdim, d * w * h)
 
     def forward(self, x):
         b, *xdims = x.shape
