@@ -22,7 +22,7 @@ from utils import device, get_logdir_name, logger, num_gpus, use_gpu
 
 def parse_args():
     parser = argparse.ArgumentParser(description='Train a network')
-    parser.add_argument('-m', '--model', default='vae', help='Model to train')
+    parser.add_argument('-m', '--model', default='draw', help='Model to train')
     parser.add_argument('-lr',
                         '--learning-rate',
                         help='learning rate',
@@ -64,6 +64,8 @@ def parse_args():
                         type=int,
                         default=10,
                         help='Number of glimpse')
+    parser.add_argument('--read', type=int, default=5, help='Read size')
+    parser.add_argument('--write', type=int, default=5, help='write size')
     parser.add_argument('--attention',
                         action='store_true',
                         help='Enable draw attention',
@@ -84,6 +86,8 @@ def main():
     param = dict(zdim=args.zdim,
                  hdim=args.hdim,
                  glimpse=args.glimpse,
+                 read_size=args.read,
+                 write_size=args.write,
                  attention=args.attention)
     model, optimizer = get_model(args.model, args.learning_rate, param, *dims)
 

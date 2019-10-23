@@ -20,6 +20,8 @@ class Draw(nn.Module):
                  width,
                  hdim,
                  zdim,
+                 read_size=5,
+                 write_size=5,
                  glimpse=10,
                  attention=False):
         super(Draw, self).__init__()
@@ -29,9 +31,9 @@ class Draw(nn.Module):
 
         if attention:
             self.read_attn_window = nn.Linear(self.hdim, 5)
-            self.read_n = 5
+            self.read_n = read_size
             self.read = self.read_attention
-            self.write_n = 5
+            self.write_n = write_size
             self.write_attn_window = nn.Linear(self.hdim, 5)
             self.write = self.write_attention
             self.encoder = nn.LSTMCell(
