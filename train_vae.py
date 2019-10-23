@@ -45,18 +45,20 @@ def parse_args():
                         help='Dataset root to store')
 
     parser.add_argument('--log-root-dir',
-                        default='/data/private/exp/mnist_vae',
+                        default='/data/private/exp/clevr_vae',
                         type=str,
                         help='log root')
     parser.add_argument('--log-interval', default=50, type=int, help='log root')
     parser.add_argument('--zdim',
-                        default=10,
+                        default=64,
                         type=int,
                         help='latent space dimension')
     parser.add_argument('--hdim',
                         type=int,
-                        default=400,
-                        help='LSTM Hidden dimension')
+                        default=128,
+                        help='Hidden dimension')
+
+
     return parser.parse_args()
 
 
@@ -69,8 +71,7 @@ def main():
     data1, _ = data['train'][0]
 
     dims = list(data1.shape)
-    param = dict(zdim=args.zdim,
-                 hdim=args.hdim)
+    param = dict(zdim=args.zdim, hdim=args.hdim)
     model, optimizer = get_model(args.model, args.learning_rate, param, *dims)
 
     model = torch.nn.DataParallel(model) if num_gpus > 1 else model

@@ -45,20 +45,20 @@ def parse_args():
                         help='Dataset root to store')
 
     parser.add_argument('--log-root-dir',
-                        default='/data/private/exp/mnist_vae',
+                        default='/data/private/exp/clevr_vae',
                         type=str,
                         help='log root')
     parser.add_argument('--log-interval', default=50, type=int, help='log root')
 
     # DRAW model
     parser.add_argument('--zdim',
-                        default=10,
+                        default=64,
                         type=int,
                         help='latent space dimension')
 
     parser.add_argument('--hdim',
                         type=int,
-                        default=256,
+                        default=128,
                         help='LSTM Hidden dimension')
     parser.add_argument('--glimpse',
                         type=int,

@@ -1,4 +1,5 @@
 from torchvision import datasets, transforms
+from datasets.clevr import CLEVRVAE
 
 
 def mnist(data_root):
@@ -40,7 +41,14 @@ def svhn(data_root):
     return data
 
 
-dataset_pool = {'mnist': mnist, 'cifar10': cifar10, 'svhn': svhn}
+def clevr(data_root):
+    data = {}
+    data['train'] = CLEVRVAE(mode='train', length=128 * 1024)
+    data['test'] = CLEVRVAE(mode='test', length=128 * 6)
+    return data
+
+
+dataset_pool = {'mnist': mnist, 'cifar10': cifar10, 'svhn': svhn, 'clevr': clevr}
 
 
 def get_dataset(name, data_root):
