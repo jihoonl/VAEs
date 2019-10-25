@@ -6,7 +6,7 @@ from torch.distributions import Normal
 
 class VAE(nn.Module):
 
-    def __init__(self, d, w, h, zdim=20, hdim=400):
+    def __init__(self, d, w, h, zdim=20, hdim=400, *args, **kwargs):
         super(VAE, self).__init__()
 
         self.stem = nn.Linear(d * w * h, hdim)

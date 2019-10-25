@@ -4,19 +4,20 @@ import os
 
 # Ignite
 import torch
-from torch.distributions import Bernoulli, Normal
 import torch.nn.functional as F
 from ignite.contrib.handlers import ProgressBar
 from ignite.engine import Engine, Events
 from ignite.handlers import Timer
 from ignite.metrics import RunningAverage
 from tensorboardX import SummaryWriter
+from torch.distributions import Bernoulli, Normal
 from torch.utils.data import DataLoader
 from torchvision.utils import make_grid
 
 from dataset import get_dataset
 from events import add_events
 from models import get_model
+from preprocess import Dummy, Quantization
 from utils import device, get_logdir_name, logger, num_gpus, use_gpu
 
 
@@ -43,21 +44,23 @@ def parse_args():
                         default='data',
                         type=str,
                         help='Dataset root to store')
-
     parser.add_argument('--log-root-dir',
-                        default='/data/private/exp/clevr_vae',
+                        default='/data/private/exp/',
                         type=str,
                         help='log root')
     parser.add_argument('--log-interval', default=50, type=int, help='log root')
     parser.add_argument('--zdim',
-                        default=64,
+                        default=10,
                         type=int,
                         help='latent space dimension')
     parser.add_argument('--hdim',
                         type=int,
-                        default=128,
+                        default=400,
                         help='Hidden dimension')
-
+    parser.add_argument('-q',
+                        '--quantization',
+                        action='store_true',
+                        help='use Quantization as preprocesser')
 
     return parser.parse_args()
 
@@ -71,7 +74,7 @@ def main():
     data1, _ = data['train'][0]
 
     dims = list(data1.shape)
-    param = dict(zdim=args.zdim, hdim=args.hdim)
+    param = dict(zdim=args.zdim, hdim=args.hdim, quant=args.quantization)
     model, optimizer = get_model(args.model, args.learning_rate, param, *dims)
 
     model = torch.nn.DataParallel(model) if num_gpus > 1 else model
@@ -94,6 +97,11 @@ def main():
     kwargs['shuffle'] = False
     test_loader = DataLoader(data['test'], args.batch_size, **kwargs)
 
+    if args.quantization:
+        q = Quantization(device=device)
+    else:
+        q = Dummy()
+
     def get_recon_error(recon, x):
         ll = Bernoulli(recon).log_prob(x)
         return -ll.sum()
@@ -102,8 +110,9 @@ def main():
         model.train()
         x, _ = batch
         x = x.to(device)
+        x_quant = q.preprocess(x)
 
-        recon, kl = model(x)
+        recon, kl = model(x_quant)
 
         nll = get_recon_error(recon, x)
         loss = nll + kl
@@ -111,8 +120,6 @@ def main():
 
         optimizer.zero_grad()
         loss.backward()
-        torch.nn.utils.clip_grad_norm_(model.parameters(), 5.0)
-
         optimizer.step()
         lr = optimizer.param_groups[0]['lr']
         ret = {
@@ -147,7 +154,8 @@ def main():
         with torch.no_grad():
             for i, (x, _) in enumerate(test_loader):
                 x = x.to(device)
-                recon, kl = model(x)
+                x_quant = q.preprocess(x)
+                recon, kl = model(x_quant)
                 nll = get_recon_error(recon, x)
                 loss = nll + kl
                 elbo = -loss
@@ -159,7 +167,7 @@ def main():
                     batch, *xdims = x.shape
                     row = 8
                     n = min(x.shape[0], row)
-                    comparison = torch.cat([x[:n], recon[:n]])
+                    comparison = torch.cat([x[:n], x_quant[:n], recon[:n]])
                     grid = make_grid(comparison.detach().cpu().float(),
                                      nrow=row)
                     writer.add_image('val/reconstruction', grid,

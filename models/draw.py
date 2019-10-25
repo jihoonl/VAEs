@@ -23,7 +23,7 @@ class Draw(nn.Module):
                  read_size=5,
                  write_size=5,
                  glimpse=10,
-                 attention=False):
+                 attention=False, *args, **kwargs):
         super(Draw, self).__init__()
         self.xdim = xdim
         self.hdim = hdim
