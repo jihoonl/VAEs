@@ -18,7 +18,7 @@ from dataset import get_dataset
 from events import add_events
 from models import get_model
 from preprocess import Dummy, Quantization
-from utils import device, get_logdir_name, logger, num_gpus, use_gpu
+from utils import device, get_logdir_name, logger, num_gpus, use_gpu, sigma
 
 
 def parse_args():
@@ -102,9 +102,10 @@ def main():
     else:
         q = Dummy()
 
-    def get_recon_error(recon, x):
-        ll = Bernoulli(recon).log_prob(x)
+    def get_recon_error(recon, x, sigma):
+        ll = Normal(recon, sigma).log_prob(x)
         return -ll.sum()
+
 
     def step(engine, batch):
         model.train()
@@ -114,7 +115,7 @@ def main():
 
         recon, kl = model(x_quant)
 
-        nll = get_recon_error(recon, x)
+        nll = get_recon_error(recon, x, sigma(engine.state.epoch))
         loss = nll + kl
         elbo = -loss
 
@@ -126,17 +127,19 @@ def main():
             'elbo': elbo.item() / len(x),
             'nll': nll.item() / len(x),
             'kl': kl.item() / len(x),
-            'lr': lr
+            'lr': lr,
+            'sigma': sigma(engine.state.epoch)
         }
         return ret
 
     trainer = Engine(step)
-    metric_names = ['elbo', 'nll', 'kl', 'lr']
+    metric_names = ['elbo', 'nll', 'kl', 'lr', 'sigma']
 
     RunningAverage(output_transform=lambda x: x['elbo']).attach(trainer, 'elbo')
     RunningAverage(output_transform=lambda x: x['nll']).attach(trainer, 'nll')
     RunningAverage(output_transform=lambda x: x['kl']).attach(trainer, 'kl')
     RunningAverage(output_transform=lambda x: x['lr']).attach(trainer, 'lr')
+    RunningAverage(output_transform=lambda x: x['sigma']).attach(trainer, 'sigma')
 
     ProgressBar().attach(trainer, metric_names=metric_names)
     Timer(average=True).attach(trainer)
@@ -156,7 +159,7 @@ def main():
                 x = x.to(device)
                 x_quant = q.preprocess(x)
                 recon, kl = model(x_quant)
-                nll = get_recon_error(recon, x)
+                nll = get_recon_error(recon, x, sigma(engine.state.epoch))
                 loss = nll + kl
                 elbo = -loss
 
