@@ -61,6 +61,11 @@ def parse_args():
                         '--quantization',
                         action='store_true',
                         help='use Quantization as preprocesser')
+    parser.add_argument('-ss',
+                        '--sigma-switch',
+                        type=int,
+                        default=1,
+                        help='Sigma switch')
 
     return parser.parse_args()
 
@@ -104,8 +109,8 @@ def main():
 
     def get_recon_error(recon, x, sigma):
         ll = Normal(recon, sigma).log_prob(x)
+        #ll = Bernoulli(recon).log_prob(x)
         return -ll.sum()
-
 
     def step(engine, batch):
         model.train()
@@ -115,7 +120,8 @@ def main():
 
         recon, kl = model(x_quant)
 
-        nll = get_recon_error(recon, x, sigma(engine.state.epoch))
+        nll = get_recon_error(recon, x,
+                              sigma(engine.state.epoch, args.sigma_switch))
         loss = nll + kl
         elbo = -loss
 
@@ -128,7 +134,7 @@ def main():
             'nll': nll.item() / len(x),
             'kl': kl.item() / len(x),
             'lr': lr,
-            'sigma': sigma(engine.state.epoch)
+            'sigma': sigma(engine.state.epoch, args.sigma_switch)
         }
         return ret
 
@@ -139,7 +145,8 @@ def main():
     RunningAverage(output_transform=lambda x: x['nll']).attach(trainer, 'nll')
     RunningAverage(output_transform=lambda x: x['kl']).attach(trainer, 'kl')
     RunningAverage(output_transform=lambda x: x['lr']).attach(trainer, 'lr')
-    RunningAverage(output_transform=lambda x: x['sigma']).attach(trainer, 'sigma')
+    RunningAverage(output_transform=lambda x: x['sigma']).attach(
+        trainer, 'sigma')
 
     ProgressBar().attach(trainer, metric_names=metric_names)
     Timer(average=True).attach(trainer)
@@ -159,7 +166,8 @@ def main():
                 x = x.to(device)
                 x_quant = q.preprocess(x)
                 recon, kl = model(x_quant)
-                nll = get_recon_error(recon, x, sigma(engine.state.epoch))
+                nll = get_recon_error(
+                    recon, x, sigma(engine.state.epoch, args.sigma_switch))
                 loss = nll + kl
                 elbo = -loss
 
@@ -170,7 +178,7 @@ def main():
                     batch, *xdims = x.shape
                     row = 8
                     n = min(x.shape[0], row)
-                    comparison = torch.cat([x[:n], x_quant[:n], recon[:n]])
+                    comparison = torch.cat([x[:n], recon[:n]])
                     grid = make_grid(comparison.detach().cpu().float(),
                                      nrow=row)
                     writer.add_image('val/reconstruction', grid,
