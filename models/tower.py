@@ -91,6 +91,6 @@ class TowerDecoder(nn.Module):
         skip_out = F.relu(self.deconv6(out))
 
         out = F.relu(self.deconv7(skip_out)) + F.relu(self.deconv5(out))
-        out = F.relu(self.deconv8(out))
+        out = torch.sigmoid(self.deconv8(out))
 
         return out

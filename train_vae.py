@@ -64,7 +64,7 @@ def parse_args():
     parser.add_argument('-ss',
                         '--sigma-switch',
                         type=int,
-                        default=1,
+                        default=3,
                         help='Sigma switch')
 
     return parser.parse_args()

@@ -7,46 +7,36 @@ from .tower import TowerEncoder, TowerDecoder
 from .sbd import SpatialBroadcastDecoder
 
 
-class VAE(nn.Module):
+class BaseEncoder(nn.Module):
 
-    def __init__(self, d, w, h, zdim=20, hdim=400, *args, **kwargs):
+    def __init__(self, d, h, w, zdim, hdim, *args, **kwargs):
         super().__init__()
-
         self.stem = nn.Linear(d * w * h, hdim)
         self.gaussian = nn.Linear(hdim, zdim * 2)
-
-        self.decoder1 = nn.Linear(zdim, hdim)
-        self.decoder2 = nn.Linear(hdim, d * w * h)
+        self.hdim = hdim
 
     def forward(self, x):
         b, *xdims = x.shape
-        mu, logvar = self.encode(x.view(b, -1))
-        z = self.reparameterize(mu, logvar)
-        recon = self.decode(z)
 
-        # see Appendix B from VAE paper:
-        # Kingma and Welling. Auto-Encoding Variational Bayes. ICLR, 2014
-        # https://arxiv.org/abs/1312.6114
-        # -0.5 * sum(1 + log(sigma^2) - mu^2 - sigma^2)
-        kl = -0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp())
-        return recon.view(x.shape), kl
+        out = F.elu(self.stem(x.view(b, -1)))
+        out = self.gaussian(out)
+        return out.view(b, self.hdim, 1, 1)
 
-    def encode(self, x):
-        out = self.stem(x)
+
+class BaseDecoder(nn.Module):
+
+    def __init__(self, d, h, w, zdim, hdim, *args, **kwargs):
+        super().__init__()
+        self.decoder1 = nn.Linear(zdim, hdim)
+        self.decoder2 = nn.Linear(hdim, d * w * h)
+        self.x_shape = (d, h, w)
+
+    def forward(self, z):
+        b, *zdims = z.shape
+        out = self.decoder1(z.view(b, -1))
         out = F.elu(out)
-        mu, logvar = torch.chunk(self.gaussian(out), 2, dim=1)
-        return mu, logvar
-
-    def reparameterize(self, mu, logvar):
-        std = logvar.mul(0.5).exp()
-        q = Normal(mu, std)
-        return q.rsample()
-
-    def decode(self, z):
-        out = self.decoder1(z)
-        out = F.relu(out)
         out = self.decoder2(out)
-        return torch.sigmoid(out)
+        return torch.sigmoid(out).view(-1, *self.x_shape)
 
 
 class AbstractVAE(nn.Module):
@@ -75,6 +65,22 @@ class AbstractVAE(nn.Module):
         return q.rsample()
 
 
+class VAE(AbstractVAE):
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.encoder = BaseEncoder(*args, **kwargs)
+        self.decoder = BaseDecoder(*args, **kwargs)
+
+
+class SbdVAE(AbstractVAE):
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.encoder = BaseEncoder(*args, **kwargs)
+        self.decoder = SpatialBroadcastDecoder(*args, **kwargs)
+
+
 class TowerVAE(AbstractVAE):
     """
     Convolutional VAE with 8 layers
@@ -95,21 +101,5 @@ class TowerSBDVAE(AbstractVAE):
 
         # Encoder
         self.encoder = TowerEncoder(d, h, w, zdim, hdim, *args, **kwargs)
-        new_zdim = int(zdim * h * w / 16)
-        self.decoder = SpatialBroadcastDecoder(d, h, w, new_zdim, hdim, *args,
+        self.decoder = SpatialBroadcastDecoder(d, h, w, zdim, hdim, *args,
                                                **kwargs)
-
-    def forward(self, x):
-        b, *xdims = x.shape
-        encoded = self.encoder(x)
-
-        mu, logvar = torch.chunk(encoded, 2, dim=1)
-        z = self.reparameterize(mu, logvar)
-        recon = self.decoder(z)
-
-        # see Appendix B from VAE paper:
-        # Kingma and Welling. Auto-Encoding Variational Bayes. ICLR, 2014
-        # https://arxiv.org/abs/1312.6114
-        # -0.5 * sum(1 + log(sigma^2) - mu^2 - sigma^2)
-        kl = -0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp())
-        return recon, kl

@@ -38,13 +38,16 @@ class SpatialBroadcastDecoder(nn.Module):
         self.conv5 = nn.Conv2d(hdim, d, kernel_size=3, stride=1, padding=1)
 
     def forward(self, z):
-        batch, *zdims = z.shape
+        batch, d, h, w = z.shape
+        h_ratio = int(self.image_shape[0] / h)
+        w_ratio = int(self.image_shape[1] / w)
 
         # Spatial Broadcasting
-        z_broad = z.view(batch, -1)
-        z_broad = z.view(*z_broad.shape, 1, 1)
-        z_broad = z_broad.expand(-1, -1, *self.image_shape)
-        broadcasted = torch.cat((z_broad, self.x_grid.expand(
+        #z_broad = z.view(batch, -1)
+        #z_broad = z.view(*z_broad.shape, 1, 1)
+        #z_broad = z_broad.expand(-1, -1, *self.image_shape)
+        z = z.repeat_interleave(h_ratio, -2).repeat_interleave(w_ratio, -1)
+        broadcasted = torch.cat((z, self.x_grid.expand(
             (batch, -1, -1, -1)), self.y_grid.expand((batch, -1, -1, -1))),
                                 dim=1)
 

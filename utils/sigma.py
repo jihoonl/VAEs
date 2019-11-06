@@ -1,6 +1,6 @@
 
 
-def get_sigma(epoch, switch=1):
+def get_sigma(epoch, switch=3):
 
     if switch == 1:
         if epoch < 20:
