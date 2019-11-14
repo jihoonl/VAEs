@@ -1,5 +1,6 @@
 from .vae import VAE, TowerVAE, TowerSBDVAE, SbdVAE
 from .draw import Draw
+from .conv_draw import ConvDraw
 from torch.optim import Adam
 
 
@@ -19,6 +20,11 @@ def get_model(name, learning_rate, param, d, h, w):
         optimizer = Adam(model.parameters(), lr=learning_rate)
     elif name == 'draw':
         model = Draw(d, h, w, **param)
+        optimizer = Adam(model.parameters(),
+                         lr=learning_rate,
+                         betas=(0.5, 0.99))
+    elif name == 'conv_draw':
+        model = ConvDraw(d, h, w, **param)
         optimizer = Adam(model.parameters(),
                          lr=learning_rate,
                          betas=(0.5, 0.99))

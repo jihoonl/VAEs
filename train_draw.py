@@ -123,7 +123,12 @@ def main():
         q = Dummy()
 
     def get_recon_error(recon, x, sigma):
-        ll = Normal(recon, sigma).log_prob(x)
+        if x.shape[1] == 1:  # Binary image
+            ll = Bernoulli(recon).log_prob(x)
+        elif x.shape[1] == 3:  # RGB image
+            ll = Normal(recon, sigma).log_prob(x)
+        else:
+            NotImplementedError('X must be either 1 or 3')
         return -ll.sum()
 
     def step(engine, batch):
