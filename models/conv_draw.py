@@ -1,6 +1,6 @@
 import torch
 from torch import nn
-from torch.distributions import Normal
+from torch.distributions import Normal, kl_divergence
 
 use_gpu = torch.cuda.is_available()
 device = torch.device('cuda' if use_gpu else 'cpu')
@@ -20,7 +20,7 @@ class Conv2dLSTMCell(nn.Module):
     Next Hidden h_t = o_t \circ tanh(c_t)
     """
 
-    def __init__(self, in_dim, out_dim, kernel_size=3, stride=1, padding=1):
+    def __init__(self, in_dim, out_dim, kernel_size=3, stride=1, padding=2):
         super(Conv2dLSTMCell, self).__init__()
         kwargs = dict(kernel_size=kernel_size, stride=stride, padding=padding)
 
@@ -67,8 +67,8 @@ class ConvDraw(nn.Module):
 
         self.T = glimpse
 
-        self.encoder = Conv2dLSTMCell(xdim, hdim, read_size)
-        self.decoder = Conv2dLSTMCell(xdim, hdim, write_size)
+        self.encoder = Conv2dLSTMCell(xdim + xdim + hdim, hdim, read_size)
+        self.decoder = Conv2dLSTMCell(zdim + xdim, hdim, write_size)
 
         self.prior = nn.Conv2d(hdim,
                                zdim * 2,
@@ -81,7 +81,7 @@ class ConvDraw(nn.Module):
                                    stride=1,
                                    padding=2)
 
-        self.upsampler = nn.ConvTranspose2d(hdim, xdim, write_size)
+        self.upsampler = nn.Conv2d(hdim, xdim, kernel_size=1, stride=1)
 
         self.init_weights()
 
@@ -100,28 +100,29 @@ class ConvDraw(nn.Module):
 
         canvas = x.new_zeros((batch, d, h, w))
 
-        c_enc = x.new_zeros((batch, hdim, h // 2, w // 2))
-        h_enc = x.new_zeros((batch, hdim, h // 2, w // 2))
+        c_enc = x.new_zeros((batch, hdim, h, w))
+        h_enc = x.new_zeros((batch, hdim, h, w))
 
-        c_dec = x.new_zeros((batch, hdim, h // 2, w // 2))
-        h_dec = x.new_zeros((batch, hdim, h // 2, w // 2))
+        c_dec = x.new_zeros((batch, hdim, h, w))
+        h_dec = x.new_zeros((batch, hdim, h, w))
 
         kl = 0
         for t in range(T):
-            e = x - torch.sigmoid(canvas)
+            eps = x - torch.sigmoid(canvas)
 
-            c_enc, h_enc = self.encoder(torch.cat(x, e, h_dec), (c_enc, h_enc))
+            c_enc, h_enc = self.encoder(torch.cat([x, eps, h_dec], dim=1),
+                                        (c_enc, h_enc))
 
             # Prior
-            p_mu, p_logvar = torch.chunk(self.prior(h_dec), dim=1)
+            p_mu, p_logvar = torch.chunk(self.prior(h_dec), 2, dim=1)
             p = Normal(p_mu, p_logvar.mul(0.5).exp())
 
             # Posterior
-            q_mu, q_logvar = torch.chunk(self.posterior(h_enc), dim=1)
+            q_mu, q_logvar = torch.chunk(self.posterior(h_enc), 2, dim=1)
             q = Normal(q_mu, q_logvar.mul(0.5).exp())
 
             # Sample
-            z = posterior.rsample()
+            z = q.rsample()
 
             c_dec, h_dec = self.decoder(torch.cat([z, canvas], dim=1),
                                         (c_dec, h_dec))
@@ -129,5 +130,7 @@ class ConvDraw(nn.Module):
             current = self.upsampler(h_dec)
             canvas = canvas + current
             kl += kl_divergence(q, p)
+
+        kl = torch.mean(torch.sum(kl, dim=[1, 2, 3]))
 
         return torch.sigmoid(canvas.view(x.shape)), kl
