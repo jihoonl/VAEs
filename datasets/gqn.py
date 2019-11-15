@@ -74,8 +74,10 @@ class GQNDataset(Dataset):
             self.root_dir = self.root_dir / index
         self.dataset = dataset
         self.mode = mode
-        self._data = self._get_files(self.root_dir, True if index else False,
-                                     length)
+        self._data = self._get_files(self.root_dir,
+                                     True if index else False,
+                                     use_cache=use_cache,
+                                     length=length)
 
     def _get_files(self, root, index=False, use_cache=False, length=None):
         if index:
