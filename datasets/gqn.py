@@ -83,7 +83,7 @@ class GQNDataset(Dataset):
         if length:
             cache_file = root / 'cache_{}.pkl'.format(length)
         else:
-            cache_file = root / 'cache_{}.pkl'.format(length)
+            cache_file = root / 'cache.pkl'
         if use_cache and cache_file.exists():
             with open(str(cache_file), 'rb') as f:
                 data = pickle.load(f)
@@ -99,7 +99,7 @@ class GQNDataset(Dataset):
 
         data = threaded_elementwise_operation(dirs, globber)
         if length:
-            self._data = self._data[:length]
+            data = data[:length]
         with open(cache_file, 'wb') as f:
             pickle.dump(data, f, pickle.HIGHEST_PROTOCOL)
 
