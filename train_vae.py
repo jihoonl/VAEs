@@ -15,10 +15,11 @@ from torch.utils.data import DataLoader
 from torchvision.utils import make_grid
 
 from dataset import get_dataset
+from datasets.gqn import Scene
 from events import add_events
 from models import get_model
 from preprocess import Dummy, Quantization
-from utils import device, get_logdir_name, logger, num_gpus, use_gpu, sigma
+from utils import device, get_logdir_name, logger, num_gpus, sigma, use_gpu
 
 
 def parse_args():
@@ -75,7 +76,7 @@ def main():
 
     logger.info('Num GPU: {}'.format(num_gpus))
     logger.info('Load Dataset')
-    data = get_dataset(args.dataset, args.data_root)
+    data = get_dataset(args.dataset, args.data_root, args.batch_size)
     data1, _ = data['train'][0]
 
     dims = list(data1.shape)
@@ -108,8 +109,12 @@ def main():
         q = Dummy()
 
     def get_recon_error(recon, x, sigma):
-        ll = Normal(recon, sigma).log_prob(x)
-        #ll = Bernoulli(recon).log_prob(x)
+        if x.shape[1] == 1:  # Binary image
+            ll = Bernoulli(recon).log_prob(x)
+        elif x.shape[1] == 3:  # RGB image
+            ll = Normal(recon, sigma).log_prob(x)
+        else:
+            NotImplementedError('X must be either 1 or 3')
         return -ll.sum()
 
     def step(engine, batch):

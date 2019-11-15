@@ -1,5 +1,7 @@
 from torchvision import datasets, transforms
+
 from datasets.clevr import CLEVRVAE
+from datasets.gqn import GQNDataset, DATASETS as GQNDATASETS
 
 
 def mnist(data_root):
@@ -48,8 +50,32 @@ def clevr(data_root):
     return data
 
 
-dataset_pool = {'mnist': mnist, 'cifar10': cifar10, 'svhn': svhn, 'clevr': clevr}
+def gqn(name, data_root, batch_size):
+    use_cache = True
+    gqn_root = '/data/public/rw/datasets/gqn/torch'
+    data = {}
+    data['train'] = GQNDataset(gqn_root, name, 'train', use_cache=use_cache, length=batch_size * 1024)
+    data['test'] = GQNDataset(gqn_root,
+                              name,
+                              'test',
+                              use_cache=use_cache,
+                              length=batch_size * 6)
+    return data
 
 
-def get_dataset(name, data_root):
-    return dataset_pool[name](data_root)
+dataset_pool = {
+    'mnist': mnist,
+    'cifar10': cifar10,
+    'svhn': svhn,
+    'clevr': clevr
+}
+
+
+def get_dataset(name, data_root, batch_size):
+
+    if name in dataset_pool.keys():
+        return dataset_pool[name](data_root)
+    elif name in GQNDATASETS:
+        return gqn(name, data_root, batch_size)
+    else:
+        raise NotImplementedError('No dataset')
