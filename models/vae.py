@@ -13,14 +13,14 @@ class BaseEncoder(nn.Module):
         super().__init__()
         self.stem = nn.Linear(d * w * h, hdim)
         self.gaussian = nn.Linear(hdim, zdim * 2)
-        self.hdim = hdim
+        self.zdim = zdim
 
     def forward(self, x):
         b, *xdims = x.shape
 
         out = F.elu(self.stem(x.view(b, -1)))
         out = self.gaussian(out)
-        return out.view(b, self.hdim, 1, 1)
+        return out.view(b, self.zdim * 2, 1, 1)
 
 
 class BaseDecoder(nn.Module):

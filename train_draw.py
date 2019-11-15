@@ -84,7 +84,7 @@ def main():
 
     logger.info('Num GPU: {}'.format(num_gpus))
     logger.info('Load Dataset')
-    data = get_dataset(args.dataset, args.data_root)
+    data = get_dataset(args.dataset, args.data_root, args.batch_size)
     data1, _ = data['train'][0]
 
     dims = list(data1.shape)
