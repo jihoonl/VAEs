@@ -90,7 +90,9 @@ def main():
     param = dict(zdim=args.zdim,
                  hdim=args.hdim,
                  quant=args.quantization,
-                 layers=args.layers)
+                 layers=args.layers,
+                 ss=args.sigma_switch,
+                 )
     model, optimizer = get_model(args.model, args.learning_rate, param, *dims)
 
     model = torch.nn.DataParallel(model) if num_gpus > 1 else model

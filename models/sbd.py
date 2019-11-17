@@ -9,13 +9,15 @@ class SpatialBroadcastDecoder(nn.Module):
     Spatial Broadcast Decoder: A Simple Architecture for Disentangled Representations in VAEs
     -> https://arxiv.org/pdf/1901.07017.pdf
 
-    And Decoder conv layer intoruced in IODINE
+    And Decoder conv layer introduced in IODINE
     -> Multi-Object Representation Learning with Iterative Variational Inference
     -> https://arxiv.org/pdf/1903.00450.pdf
     """
 
     def __init__(self, d, h, w, zdim=7, hdim=64, *args, **kwargs):
         super().__init__()
+        if 'odim' in kwargs:
+            d = kwargs['odim']
 
         self.image_shape = (h, w)
 

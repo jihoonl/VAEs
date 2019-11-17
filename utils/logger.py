@@ -30,7 +30,7 @@ def get_logdir_name(args, param):
         batch_size=args.batch_size,
         epoch=args.epoch,
         num_gpu=num_gpus,
-        lr=args.learning_rate,
+        lr=args.learning_rate
     )
     c.update(param)
     config = '_'.join(['{}{}'.format(k, str(v)) for k, v in c.items()])

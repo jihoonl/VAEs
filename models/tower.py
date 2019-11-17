@@ -49,6 +49,10 @@ class TowerDecoder(nn.Module):
 
     def __init__(self, d, h, w, zdim=64, hdim=128, *args, **kwargs):
         super().__init__()
+
+        if 'odim' in kwargs:
+            d = kwargs['odim']
+
         self.deconv1 = nn.ConvTranspose2d(zdim,
                                           hdim // 2,
                                           kernel_size=1,

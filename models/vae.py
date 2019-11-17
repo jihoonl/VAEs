@@ -90,7 +90,6 @@ class TowerVAE(AbstractVAE):
 
     def __init__(self, *args, **kwargs):
         super().__init__()
-
         # Encoder
         self.encoder = TowerEncoder(*args, **kwargs)
         self.decoder = TowerDecoder(*args, **kwargs)
