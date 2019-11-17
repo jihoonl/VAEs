@@ -2,31 +2,37 @@ import torch
 import torch.nn.functional as F
 from torch import nn
 
-from .sbp import LatentSBP
 from .component_vae import ComponentVAE
+from .sbp import RecurrentSBP
 
 
 class Genesis(nn.Module):
 
     def __init__(self, d, h, w, zdim=64, hdim=128, layers=4, *args, **kwargs):
+        super().__init__()
         self.layers = layers
         self.zdim = zdim
         self.hdim = hdim
 
-        self.mask_vae = LatentSBP(d, h, w, zdim, hdim, *args, **kwargs)
+        self.mask_vae = RecurrentSBP(d, h, w, zdim, hdim, *args, **kwargs)
 
         self.component_vae = ComponentVAE(d, h, w, zdim, hdim, *args, **kwargs)
 
     def forward(self, x):
         """
         1. Mask encoding by Stick Breaking Process Encoder
-        2. Component VAE to encode and decode.
+        2. Component VAE to encode and decode. image
         """
         layers = self.layers
 
-        # Stick Breaking Process
-        masks, kl_mask = self.mask_encoder(x, layers)
+        # pi - Stick Breaking Process
+        log_ms_k, kl_m = self.mask_vae(x, layers)
 
-        x_mu, kl = self.component_vae(x, masks)
+        # Decode components
+        x_mu_k, kl_c = self.component_vae(x, log_ms_k)
+        ms_k = torch.stack(log_ms_k, dim=4).exp()
 
-        return x_mu, masks, kl
+        recon_k = ms_k * x_mu_k
+        recon = recon_k.sum(dim=4)
+
+        return recon, x_mu_k, ms_k, kl_m, kl_c

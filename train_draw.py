@@ -16,7 +16,7 @@ from torchvision.utils import make_grid
 
 from dataset import get_dataset
 from events import add_events
-from models import get_model
+from models import get_model_draw as get_model
 from preprocess import Dummy, Quantization
 from utils import device, get_logdir_name, logger, num_gpus, use_gpu, sigma
 
