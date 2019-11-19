@@ -127,7 +127,7 @@ def main():
     def get_recon_error(recon, x, sigma):
         ll = Normal(recon, sigma).log_prob(x)
         #ll = Bernoulli(recon).log_prob(x)
-        return -ll.sum()
+        return -ll.sum(dim=[1,2,3]).mean()
 
     def step(engine, batch):
         model.train()
