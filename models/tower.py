@@ -31,6 +31,13 @@ class TowerEncoder(nn.Module):
         self.conv8 = nn.Conv2d(hdim, zdim * 2, kernel_size=1, stride=1)
 
     def forward(self, x):
+
+        out = self.stem(x)
+        out = self.gaussian(out)
+
+        return out
+
+    def stem(self, x):
         skip_in = F.relu(self.conv1(x))
         skip_out = F.relu(self.conv2(skip_in))
 
@@ -40,9 +47,10 @@ class TowerEncoder(nn.Module):
         skip_out = F.relu(self.conv6(out))
 
         out = F.relu(self.conv7(skip_out)) + F.relu(self.conv5(out))
-        out = F.relu(self.conv8(out))
-
         return out
+
+    def gaussian(self, h):
+        return self.conv8(h)
 
 
 class TowerDecoder(nn.Module):
