@@ -14,7 +14,7 @@ class Genesis(nn.Module):
         self.zdim = zdim
         self.hdim = hdim
 
-        self.mask_vae = RecurrentSBP(d, h, w, zdim, hdim, *args, **kwargs)
+        self.mask_vae = TowerRecurrentSBP(d, h, w, zdim, hdim, *args, **kwargs)
         self.component_vae = ComponentVAE(d, h, w, zdim, hdim, *args, **kwargs)
 
     def forward(self, x):
