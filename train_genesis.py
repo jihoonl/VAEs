@@ -74,6 +74,10 @@ def parse_args():
                         type=int,
                         default=3,
                         help='Sigma switch')
+    parser.add_argument('--postfix',
+                        type=str,
+                        default='',
+                        help='Postfix of logdir')
 
     return parser.parse_args()
 
