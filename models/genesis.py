@@ -3,7 +3,7 @@ import torch.nn.functional as F
 from torch import nn
 
 from .component_vae import ComponentVAE
-from .sbp import RecurrentSBP
+from .sbp import RecurrentSBP, TowerRecurrentSBP
 
 
 class Genesis(nn.Module):

@@ -4,6 +4,7 @@ from torch import nn
 from torch.distributions import Normal, kl_divergence
 
 from .vae import BaseEncoder, BaseDecoder
+from .sbd import SpatialBroadcastDecoder
 
 
 class ComponentVAE(nn.Module):
@@ -19,11 +20,12 @@ class ComponentVAE(nn.Module):
         mask_dim = 1
         self.posterior_encoder = BaseEncoder(d + mask_dim, h, w, zdim, hdim,
                                              *args, **kwargs)
-        self.posterior_decoder = BaseDecoder(d, h, w, zdim, hdim, *args,
-                                             **kwargs)
-
         self.prior_encoder = BaseEncoder(mask_dim, h, w, zdim, hdim, *args,
                                          **kwargs)
+
+        self.decoder = BaseDecoder(d, h, w, zdim, hdim, *args, **kwargs)
+        #self.decoder = SpatialBroadcastDecoder(d, h, w, zdim, hdim, *args,
+        #                                       **kwargs)
 
     def forward(self, x, masks_log):
         K = len(masks_log)
@@ -40,14 +42,13 @@ class ComponentVAE(nn.Module):
         p_mu, p_logvar = torch.chunk(p_encoded, 2, dim=1)
         p = Normal(p_mu, p_logvar.mul(0.5).exp())
 
-
         # KL(q(z^c|x,z^m)|| p(z^c|z^m))
         kl_all = kl_divergence(q, p)
         kl_k = torch.stack(torch.chunk(kl_all, K, dim=0), dim=4)
 
         # Decode
         z = q.rsample()
-        x_mu = self.posterior_decoder(z)
+        x_mu = self.decoder(z)
         x_mu_k = torch.stack(torch.chunk(x_mu, K, dim=0), dim=4)
 
         return x_mu_k, kl_k
