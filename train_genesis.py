@@ -49,7 +49,7 @@ def parse_args():
                         type=str,
                         help='Dataset root to store')
     parser.add_argument('--log-root-dir',
-                        default='/data/private/exp/',
+                        default='/data/private/exp/genesis',
                         type=str,
                         help='log root')
     parser.add_argument('--log-interval', default=50, type=int, help='log root')

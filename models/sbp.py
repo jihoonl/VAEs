@@ -11,7 +11,7 @@ class RecurrentSBP(nn.Module):
 
     def __init__(self, d, h, w, zdim, hdim, *args, **kwargs):
         super().__init__()
-        self.core= VAE(d, h, w, zdim, hdim, odim=1, *args, **kwargs)
+        self.core = VAE(d, h, w, zdim, hdim, odim=1, *args, **kwargs)
 
         self.posterior_lstm = nn.LSTM(zdim + hdim, zdim * 2)
         self.posterior_linear = nn.Linear(zdim * 2, zdim * 2)
@@ -19,7 +19,7 @@ class RecurrentSBP(nn.Module):
         self.prior_lstm = nn.LSTM(zdim, zdim * 2)
         self.prior_linear = nn.Linear(zdim * 2, zdim * 2)
 
-    def forward(self, x, steps):
+    def forward(self, x, K):
         batch, *xdims = x.shape
         kl = 0
 
@@ -39,7 +39,12 @@ class RecurrentSBP(nn.Module):
         # z^m encoding step
         q_state = None
         p_state = None
-        for s in range(steps - 1):
+        """
+        Genesis Eq - 1
+        p_{\theta}(z^m_{1:K}) =
+            \prod^K_{k=1}p_{\theta}(z^m_k|u_k)|_u_k=R_\theta(z^m_{k-1},u_{k-1})
+        """
+        for s in range(K - 1):
             # Posterior
             q_lstm, state = self.posterior_lstm(
                 torch.cat([h, zs_q[-1]], dim=1).view(1, batch, -1), q_state)
@@ -57,19 +62,22 @@ class RecurrentSBP(nn.Module):
             zs_q.append(z_q)
             kl += kl_divergence(q, p)
 
-        # Decoding z to create mask image
+        # Parallelized decoding of z^m
         zs_q = torch.cat(zs_q, dim=0)
-        masks = self.core.decoder(zs_q)
-        masks = torch.chunk(masks, steps, dim=0)
+        decoded_zs = self.core.decoder(zs_q)
+        decoded_zs = torch.chunk(decoded_zs, K, dim=0)
 
+        # Genesis Eq - 4 log version
         log_ms = []
         log_ss = [torch.zeros_like(x)[:, :1, :, :]]
-        for m in masks[:-1]:
-            log_m = F.logsigmoid(m)
-            log_neg_m = F.logsigmoid(-m)
+        # pi_1:K-1
+        for z in decoded_zs[:-1]:
+            log_m = F.logsigmoid(z)
+            log_neg_m = F.logsigmoid(-z)
             log_ms.append(log_ss[-1] + log_m)
             log_ss.append(log_ss[-1] + log_neg_m)
-        log_neg_m = F.logsigmoid(masks[-1])
+        # pi_K
+        log_neg_m = log_ss[-1] + F.logsigmoid(decoded_zs[-1])
         log_ms.append(log_neg_m)
         return log_ms, kl
 
