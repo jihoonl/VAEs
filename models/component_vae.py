@@ -23,9 +23,9 @@ class ComponentVAE(nn.Module):
         self.prior_encoder = BaseEncoder(mask_dim, h, w, zdim, hdim, *args,
                                          **kwargs)
 
-        self.decoder = BaseDecoder(d, h, w, zdim, hdim, *args, **kwargs)
-        #self.decoder = SpatialBroadcastDecoder(d, h, w, zdim, hdim, *args,
-        #                                       **kwargs)
+        #self.decoder = BaseDecoder(d, h, w, zdim, hdim, *args, **kwargs)
+        self.decoder = SpatialBroadcastDecoder(d, h, w, zdim, hdim, *args,
+                                               **kwargs)
 
     def forward(self, x, masks_log):
         K = len(masks_log)
