@@ -7,6 +7,39 @@ from .vae import BaseEncoder, BaseDecoder
 from .sbd import SpatialBroadcastDecoder
 
 
+class ComponentEncoder(nn.Module):
+
+    def __init__(self, d, h, w, zdim, hdim, *args, **kwargs):
+        super().__init__()
+        self.zdim = zdim
+
+        self.conv1 = nn.Conv2d(d, zdim, kernel_size=3, stride=2, padding=1)
+        self.conv2 = nn.Conv2d(zdim, zdim, kernel_size=3, stride=2, padding=1)
+        self.conv3 = nn.Conv2d(zdim,
+                               zdim * 2,
+                               kernel_size=3,
+                               stride=2,
+                               padding=1)
+        self.conv4 = nn.Conv2d(zdim * 2,
+                               zdim * 2,
+                               kernel_size=3,
+                               stride=2,
+                               padding=1)
+        self.mlp1 = nn.Linear(zdim * 2 * (h // 16) * (w // 16), hdim)
+        self.mlp2 = nn.Linear(hdim, zdim * 2)
+
+    def forward(self, x):
+        b, *xdims = x.shape
+        out = F.elu(self.conv1(x))
+        out = F.elu(self.conv2(out))
+        out = F.elu(self.conv3(out))
+        out = F.elu(self.conv4(out))
+        out = out.view(out.shape[0], -1)
+        out = F.elu(self.mlp1(out))
+        out = self.mlp2(out)
+        return out.view(b, self.zdim * 2, 1, 1)
+
+
 class ComponentVAE(nn.Module):
     """
     Component VAE specified in
@@ -18,10 +51,14 @@ class ComponentVAE(nn.Module):
     def __init__(self, d, h, w, zdim=64, hdim=128, *args, **kwargs):
         super().__init__()
         mask_dim = 1
-        self.posterior_encoder = BaseEncoder(d + mask_dim, h, w, zdim, hdim,
-                                             *args, **kwargs)
-        self.prior_encoder = BaseEncoder(mask_dim, h, w, zdim, hdim, *args,
-                                         **kwargs)
+        #self.posterior_encoder = BaseEncoder(d + mask_dim, h, w, zdim, hdim,
+        #                                     *args, **kwargs)
+        #self.prior_encoder = BaseEncoder(mask_dim, h, w, zdim, hdim, *args,
+        #                                 **kwargs)
+        self.posterior_encoder = ComponentEncoder(d + mask_dim, h, w, zdim,
+                                                  hdim, *args, **kwargs)
+        self.prior_encoder = ComponentEncoder(mask_dim, h, w, zdim, hdim, *args,
+                                              **kwargs)
 
         #self.decoder = BaseDecoder(d, h, w, zdim, hdim, *args, **kwargs)
         self.decoder = SpatialBroadcastDecoder(d, h, w, zdim, hdim, *args,
@@ -44,6 +81,7 @@ class ComponentVAE(nn.Module):
 
         # KL(q(z^c|x,z^m)|| p(z^c|z^m))
         kl_all = kl_divergence(q, p)
+        kl = torch.chunk(kl_all, K, dim=0)
         kl_k = torch.stack(torch.chunk(kl_all, K, dim=0), dim=4)
 
         # Decode
