@@ -50,7 +50,8 @@ class TowerRecurrentSBP(nn.Module):
         p = Normal(0, 1)
 
         # First layer kl divergence
-        kl += kl_divergence(q, p)
+        kl = []
+        kl.append(kl_divergence(q, p))
 
         # z^m encoding step
         batch, zdim, *shape = z.shape
@@ -79,7 +80,8 @@ class TowerRecurrentSBP(nn.Module):
             p, z_p = self.reparameterize(p_mu, p_logvar)
 
             zs_q.append(z_q)
-            kl += kl_divergence(q, p)
+            kl.append(kl_divergence(q, p))
+        kl = torch.stack(kl, dim=4)
 
         # Parallelized decoding of z^m
         zs_q = torch.cat(zs_q, dim=0)

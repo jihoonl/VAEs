@@ -91,12 +91,13 @@ def main():
     data1, _ = data['train'][0]
 
     dims = list(data1.shape)
-    param = dict(zdim=args.zdim,
-                 hdim=args.hdim,
-                 quant=args.quantization,
-                 layers=args.layers,
-                 ss=args.sigma_switch,
-                 )
+    param = dict(
+        zdim=args.zdim,
+        hdim=args.hdim,
+        quant=args.quantization,
+        layers=args.layers,
+        ss=args.sigma_switch,
+    )
     model, optimizer = get_model(args.model, args.learning_rate, param, *dims)
 
     model = torch.nn.DataParallel(model) if num_gpus > 1 else model
@@ -127,7 +128,7 @@ def main():
     def get_recon_error(recon, x, sigma):
         ll = Normal(recon, sigma).log_prob(x)
         #ll = Bernoulli(recon).log_prob(x)
-        return -ll.sum(dim=[1,2,3]).mean()
+        return -ll.sum(dim=[1, 2, 3]).mean()
 
     def step(engine, batch):
         model.train()
@@ -139,8 +140,8 @@ def main():
 
         nll = get_recon_error(recon, x,
                               sigma(engine.state.epoch, args.sigma_switch))
-        kl_m = kl_m.sum(dim=1).mean()
-        kl_c = kl_c.sum(dim=[1, 2, 3]).mean()
+        kl_m = kl_m.sum(dim=[1, 2, 3, 4]).mean()
+        kl_c = kl_c.sum(dim=[1, 2, 3, 4]).mean()
         loss = nll + kl_m + kl_c
         elbo = -loss
 
@@ -190,7 +191,7 @@ def main():
                 recon, x_mu_k, ms_k, kl_m, kl_c = model(x_quant)
                 nll = get_recon_error(
                     recon, x, sigma(engine.state.epoch, args.sigma_switch))
-                kl_m = kl_m.sum(dim=1).mean()
+                kl_m = kl_m.sum(dim=[1, 2, 3, 4]).mean()
                 kl_c = kl_c.sum(dim=[1, 2, 3, 4]).mean()
                 loss = nll + kl_m + kl_c
                 elbo = -loss
