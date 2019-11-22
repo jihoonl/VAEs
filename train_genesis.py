@@ -178,7 +178,10 @@ def main():
 
         loss = nll + beta * (kl_c + kl_m)
         elbo = -loss
+        loss.backward()
+        optimizer.step()
 
+        # GECO update
         n_pixels = x.shape[1] * x.shape[2] * x.shape[3]
         goal = args.geco_goal * n_pixels
         geco_lr = args.geco_lr
@@ -192,8 +195,6 @@ def main():
         engine.global_info['kl_ema'] = kl_ema
         engine.global_info['beta'] = beta
 
-        loss.backward()
-        optimizer.step()
         lr = optimizer.param_groups[0]['lr']
         ret = {
             'elbo': elbo.item(),
@@ -237,6 +238,7 @@ def main():
         val_kl_c = 0
         val_nll = 0
 
+        beta = engine.global_info['beta']
         with torch.no_grad():
             for i, (x, _) in enumerate(test_loader):
                 x = x.to(device)
@@ -246,7 +248,7 @@ def main():
                     recon, x, sigma(engine.state.epoch, args.sigma_switch))
                 kl_m = kl_m.sum(dim=[1, 2, 3, 4]).mean()
                 kl_c = kl_c.sum(dim=[1, 2, 3, 4]).mean()
-                loss = nll + kl_m + kl_c
+                loss = nll + beta * (kl_m + kl_c)
                 elbo = -loss
 
                 val_elbo += elbo
@@ -286,6 +288,7 @@ def main():
             val_nll /= len(test_loader)
             writer.add_scalar('val/elbo', val_elbo.item(),
                               engine.state.iteration)
+            writer.add_scalar('val/beta', beta.item(), engine.state.iteration)
             writer.add_scalar('val/kl_m', val_kl_m.item(),
                               engine.state.iteration)
             writer.add_scalar('val/kl_c', val_kl_c.item(),
