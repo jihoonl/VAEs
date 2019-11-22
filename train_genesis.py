@@ -19,7 +19,8 @@ from datasets.gqn import Scene
 from events import add_events
 from models import get_model_genesis as get_model
 from preprocess import Dummy, Quantization
-from utils import device, get_logdir_name, logger, num_gpus, sigma, use_gpu
+from utils import (device, get_logdir_name, get_ema, geco_beta_update, logger,
+                   num_gpus, sigma, use_gpu)
 
 
 def parse_args():
@@ -74,12 +75,36 @@ def parse_args():
                         type=int,
                         default=3,
                         help='Sigma switch')
+    parser.add_argument('--geco-init',
+                        type=float,
+                        default=1.0,
+                        help='geco beta')
+    parser.add_argument('--geco-alpha',
+                        type=float,
+                        default=0.99,
+                        help='geco alpha')
+    parser.add_argument('--geco-lr',
+                        type=float,
+                        default=1e-5,
+                        help='geco learning rate')
+    parser.add_argument('--geco-speedup',
+                        type=float,
+                        default=10.,
+                        help='geco learning rate')
+    parser.add_argument('--geco-goal',
+                        type=float,
+                        default=0.5655,
+                        help='geco reconstruction goal')
     parser.add_argument('--postfix',
                         type=str,
                         default='',
                         help='Postfix of logdir')
 
     return parser.parse_args()
+
+
+nll_ema = None
+kl_ema = None
 
 
 def main():
@@ -142,25 +167,52 @@ def main():
                               sigma(engine.state.epoch, args.sigma_switch))
         kl_m = kl_m.sum(dim=[1, 2, 3, 4]).mean()
         kl_c = kl_c.sum(dim=[1, 2, 3, 4]).mean()
-        loss = nll + kl_m + kl_c
+        optimizer.zero_grad()
+
+        nll_ema = engine.global_info['nll_ema']
+        kl_ema = engine.global_info['kl_ema']
+        beta = engine.global_info['beta']
+
+        nll_ema = get_ema(nll.detach(), nll_ema, args.geco_alpha)
+        kl_ema = get_ema((kl_m + kl_c).detach(), kl_ema, args.geco_alpha)
+
+        loss = nll + beta * (kl_c + kl_m)
         elbo = -loss
 
-        optimizer.zero_grad()
+        n_pixels = x.shape[1] * x.shape[2] * x.shape[3]
+        goal = args.geco_goal * n_pixels
+        geco_lr = args.geco_lr
+        beta = geco_beta_update(beta,
+                                nll_ema,
+                                goal,
+                                geco_lr,
+                                speedup=args.geco_speedup)
+
+        engine.global_info['nll_ema'] = nll_ema
+        engine.global_info['kl_ema'] = kl_ema
+        engine.global_info['beta'] = beta
+
         loss.backward()
         optimizer.step()
         lr = optimizer.param_groups[0]['lr']
         ret = {
-            'elbo': elbo.item() / len(x),
-            'nll': nll.item() / len(x),
-            'kl_m': kl_m.item() / len(x),
-            'kl_c': kl_c.item() / len(x),
+            'elbo': elbo.item(),
+            'nll': nll.item(),
+            'kl_m': kl_m.item(),
+            'kl_c': kl_c.item(),
             'lr': lr,
-            'sigma': sigma(engine.state.epoch, args.sigma_switch)
+            'sigma': sigma(engine.state.epoch, args.sigma_switch),
+            'beta': beta
         }
         return ret
 
     trainer = Engine(step)
-    metric_names = ['elbo', 'nll', 'kl_m', 'kl_c', 'lr', 'sigma']
+    trainer.global_info = {
+        'nll_ema': None,
+        'kl_ema': None,
+        'beta': torch.tensor(args.geco_init).to(device)
+    }
+    metric_names = ['elbo', 'nll', 'kl_m', 'kl_c', 'lr', 'sigma', 'beta']
 
     RunningAverage(output_transform=lambda x: x['elbo']).attach(trainer, 'elbo')
     RunningAverage(output_transform=lambda x: x['nll']).attach(trainer, 'nll')
@@ -169,6 +221,7 @@ def main():
     RunningAverage(output_transform=lambda x: x['lr']).attach(trainer, 'lr')
     RunningAverage(output_transform=lambda x: x['sigma']).attach(
         trainer, 'sigma')
+    RunningAverage(output_transform=lambda x: x['beta']).attach(trainer, 'beta')
 
     ProgressBar().attach(trainer, metric_names=metric_names)
     Timer(average=True).attach(trainer)
@@ -227,10 +280,10 @@ def main():
                         'val/layers',
                         make_grid(cat.detach().cpu().float(), nrow=max_col),
                         engine.state.iteration)
-            val_elbo /= len(test_loader.dataset)
-            val_kl_m /= len(test_loader.dataset)
-            val_kl_c /= len(test_loader.dataset)
-            val_nll /= len(test_loader.dataset)
+            val_elbo /= len(test_loader)
+            val_kl_m /= len(test_loader)
+            val_kl_c /= len(test_loader)
+            val_nll /= len(test_loader)
             writer.add_scalar('val/elbo', val_elbo.item(),
                               engine.state.iteration)
             writer.add_scalar('val/kl_m', val_kl_m.item(),
