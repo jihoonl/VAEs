@@ -72,12 +72,12 @@ class ComponentVAE(nn.Module):
         # Posterior Encode
         q_encoded = self.posterior_encoder(torch.cat([x, mlog], dim=1))
         q_mu, q_logvar = torch.chunk(q_encoded, 2, dim=1)
-        q = Normal(q_mu, q_logvar.mul(0.5).exp())
+        q = Normal(q_mu, q_logvar.sigmoid() * 0.99 + 0.01)
 
         # Prior Encode
         p_encoded = self.prior_encoder(mlog)
         p_mu, p_logvar = torch.chunk(p_encoded, 2, dim=1)
-        p = Normal(p_mu, p_logvar.mul(0.5).exp())
+        p = Normal(p_mu, p_logvar.sigmoid() * 0.99 + 0.01)
 
         # KL(q(z^c|x,z^m)|| p(z^c|z^m))
         kl_all = kl_divergence(q, p)

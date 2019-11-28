@@ -4,6 +4,7 @@ from torch import nn
 
 from .component_vae import ComponentVAE
 from .sbp import RecurrentSBP, TowerRecurrentSBP
+from .timer import Timer
 
 
 class Genesis(nn.Module):
@@ -23,15 +24,22 @@ class Genesis(nn.Module):
         2. Component VAE to encode and decode. image
         """
         layers = self.layers
+        t = Timer()
 
         # pi - Stick Breaking Process
+        t.tic()
         log_ms_k, kl_m = self.mask_vae(x, layers)
+        # print('Mask VAE: ', t.toc())
 
         # Decode components
+        t.tic()
         x_mu_k, kl_c = self.component_vae(x, log_ms_k)
+        #print('Comp VAE: ', t.toc())
+        t.tic()
         ms_k = torch.stack(log_ms_k, dim=4).exp()
 
         recon_k = ms_k * x_mu_k
         recon = recon_k.sum(dim=4)
+        #print('Remain VAE: ', t.toc())
 
-        return recon, x_mu_k, ms_k, kl_m, kl_c
+        return recon, recon_k, x_mu_k, ms_k, kl_m, kl_c

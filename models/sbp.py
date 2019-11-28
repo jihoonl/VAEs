@@ -5,6 +5,7 @@ from torch.distributions import Normal, kl_divergence
 
 from .vae import BaseEncoder, BaseDecoder, VAE, TowerVAE
 from .conv_draw import Conv2dLSTMCell
+from .timer import Timer
 
 
 class TowerRecurrentSBP(nn.Module):
@@ -39,7 +40,10 @@ class TowerRecurrentSBP(nn.Module):
         batch, *xdims = x.shape
         kl = 0
 
+        t = Timer()
+
         # Posterior
+        t.tic()
         h = self.core.encoder.stem(x)
         encoded = self.core.encoder.gaussian(h)
         mu, logvar = torch.chunk(encoded, 2, dim=1)
@@ -65,6 +69,7 @@ class TowerRecurrentSBP(nn.Module):
         p_{\theta}(z^m_{1:K}) =
             \prod^K_{k=1}p_{\theta}(z^m_k|u_k)|_u_k=R_\theta(z^m_{k-1},u_{k-1})
         """
+        t.tic()
         for s in range(K - 1):
             # Posterior
             c_q, h_q = self.posterior_lstm(torch.cat([h, zs_q[-1]], dim=1),
@@ -81,6 +86,7 @@ class TowerRecurrentSBP(nn.Module):
 
             zs_q.append(z_q)
             kl.append(kl_divergence(q, p))
+        t.tic()
         kl = torch.stack(kl, dim=4)
 
         # Parallelized decoding of z^m
@@ -88,6 +94,7 @@ class TowerRecurrentSBP(nn.Module):
         decoded_zs = self.core.decoder(zs_q)
         decoded_zs = torch.chunk(decoded_zs, K, dim=0)
 
+        t.tic()
         # Genesis Eq - 4 log version
         log_ms = []
         log_ss = [torch.zeros_like(x)[:, :1, :, :]]
@@ -183,6 +190,6 @@ class RecurrentSBP(nn.Module):
         return log_ms, kl
 
     def reparameterize(self, mu, logvar):
-        q = Normal(mu, logvar.mul(0.5).exp())
+        q = Normal(mu, logvar.sigmoid() * 0.99 + 0.01)
         z = q.rsample()
         return q, z

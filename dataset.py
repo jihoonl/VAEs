@@ -54,7 +54,11 @@ def gqn(name, data_root, batch_size):
     use_cache = True
     gqn_root = '/data/public/rw/datasets/gqn/torch'
     data = {}
-    data['train'] = GQNDataset(gqn_root, name, 'train', use_cache=use_cache, length=batch_size * 1024)
+    data['train'] = GQNDataset(gqn_root,
+                               name,
+                               'train',
+                               use_cache=use_cache,
+                               length=batch_size * 1024)  # * 4
     data['test'] = GQNDataset(gqn_root,
                               name,
                               'test',
