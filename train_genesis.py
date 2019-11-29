@@ -70,7 +70,7 @@ def parse_args():
                         type=int,
                         default=4,
                         help='Number of layers')
-    parser.add_argument('--sigma', type=float, default=0.1, help='Sigma switch')
+    parser.add_argument('--sigma', type=float, default=0.7, help='Sigma switch')
     parser.add_argument('--geco-init',
                         type=float,
                         default=1.0,
@@ -161,8 +161,8 @@ def main():
         recon, recon_k, x_mu_k, ms_k, kl_m, kl_c = model(x)
 
         nll = get_recon_error(recon, x, args.sigma)
-        kl_m = kl_m.sum(dim=[1, 2, 3]).mean()
-        kl_c = kl_c.sum(dim=[1, 2, 3]).mean()
+        kl_m = kl_m.sum(dim=[1, 2, 3, 4]).mean()
+        kl_c = kl_c.sum(dim=[1, 2, 3, 4]).mean()
         optimizer.zero_grad()
 
         nll_ema = engine.global_info['nll_ema']
