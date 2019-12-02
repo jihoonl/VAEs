@@ -18,7 +18,7 @@ from dataset import get_dataset
 from datasets.gqn import Scene
 from events import add_events
 from models import get_model_genesis as get_model
-from preprocess import Dummy, Quantization
+from preprocess import Dummy, Quantization, Range
 from utils import (device, get_logdir_name, get_ema, geco_beta_update, logger,
                    num_gpus, use_gpu)
 
@@ -145,7 +145,7 @@ def main():
     if not args.no_quantization:
         q = Quantization(device=device)
     else:
-        q = Dummy()
+        q = Range()
 
     def get_recon_error(recon, x, sigma):
         ll = Normal(recon, sigma).log_prob(x)

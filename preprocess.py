@@ -9,6 +9,17 @@ class Dummy(object):
     def postprocess(self, image):
         return image
 
+class Range(object):
+
+    def preprocess(self, image):
+        image = image - 0.5
+        return image * 2.0
+
+    def postprocess(self, image):
+        image = image / 2.0 + 0.5
+        image = torch.clamp(image, min=0, max=1.0)
+        return image
+
 
 # Image Quantization
 class Quantization(object):
