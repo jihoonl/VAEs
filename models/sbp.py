@@ -9,6 +9,13 @@ from .timer import Timer
 from .modules.sylvester_vae import VAE as SylvesterVAE
 
 
+def reparameterize(mu, logvar):
+    #q = Normal(mu, logvar.sigmoid() * 0.99 + 0.01)
+    q = Normal(mu, F.softplus(logvar + 0.5) + 1e-8)
+    z = q.rsample()
+    return q, z
+
+
 class TowerRecurrentSBP(nn.Module):
 
     def __init__(self, d, h, w, zdim, hdim, *args, **kwargs):
@@ -48,7 +55,7 @@ class TowerRecurrentSBP(nn.Module):
         h = self.core.encoder.stem(x)
         encoded = self.core.encoder.gaussian(h)
         mu, logvar = torch.chunk(encoded, 2, dim=1)
-        q, z = self.reparameterize(mu, logvar)
+        q, z = reparameterize(mu, logvar)
         zs_q = [z]
 
         # Prior
@@ -77,13 +84,13 @@ class TowerRecurrentSBP(nn.Module):
                                            (c_q, h_q))
             q_encoded = self.posterior_linear(h_q)
             q_mu, q_logvar = torch.chunk(q_encoded, 2, dim=1)
-            q, z_q = self.reparameterize(q_mu, q_logvar)
+            q, z_q = reparameterize(q_mu, q_logvar)
 
             # Prior
             c_p, h_p = self.prior_lstm(zs_q[-1], (c_p, h_p))
             p_encoded = self.prior_linear(h_p)
             p_mu, p_logvar = torch.chunk(p_encoded, 2, dim=1)
-            p, z_p = self.reparameterize(p_mu, p_logvar)
+            p, z_p = reparameterize(p_mu, p_logvar)
 
             zs_q.append(z_q)
             kl.append(kl_divergence(q, p))
@@ -109,11 +116,6 @@ class TowerRecurrentSBP(nn.Module):
         log_neg_m = log_ss[-1] + F.logsigmoid(decoded_zs[-1])
         log_ms.append(log_neg_m)
         return log_ms, kl
-
-    def reparameterize(self, mu, logvar):
-        q = Normal(mu, logvar.sigmoid() * 0.99 + 0.01)
-        z = q.rsample()
-        return q, z
 
 
 class RecurrentSBP(nn.Module):
@@ -136,7 +138,7 @@ class RecurrentSBP(nn.Module):
         h = self.core.encoder.stem(x.view(batch, -1))
         encoded = self.core.encoder.gaussian(h)
         mu, logvar = torch.chunk(encoded, 2, dim=1)
-        q, z = self.reparameterize(mu, logvar)
+        q, z = reparameterize(mu, logvar)
         zs_q = [z]
 
         # Prior
@@ -159,14 +161,14 @@ class RecurrentSBP(nn.Module):
                 torch.cat([h, zs_q[-1]], dim=1).view(1, batch, -1), q_state)
             q_encoded = self.posterior_linear(q_lstm.view(batch, -1))
             q_mu, q_logvar = torch.chunk(q_encoded, 2, dim=1)
-            q, z_q = self.reparameterize(q_mu, q_logvar)
+            q, z_q = reparameterize(q_mu, q_logvar)
 
             # Prior
             p_lstm, state = self.prior_lstm(zs_q[-1].view(1, batch, -1),
                                             p_state)
             p_encoded = self.prior_linear(p_lstm.view(batch, -1))
             p_mu, p_logvar = torch.chunk(p_encoded, 2, dim=1)
-            p, z_p = self.reparameterize(p_mu, p_logvar)
+            p, z_p = reparameterize(p_mu, p_logvar)
 
             zs_q.append(z_q)
             kl.append(kl_divergence(q, p))
@@ -191,11 +193,6 @@ class RecurrentSBP(nn.Module):
         log_neg_m = log_ss[-1] + F.logsigmoid(decoded_zs[-1])
         log_ms.append(log_neg_m)
         return log_ms, kl
-
-    def reparameterize(self, mu, logvar):
-        q = Normal(mu, logvar.sigmoid() * 0.99 + 0.01)
-        z = q.rsample()
-        return q, z
 
 
 class GatedRecurrentSBP(RecurrentSBP):
@@ -220,7 +217,7 @@ class GatedRecurrentSBP(RecurrentSBP):
         #mu, logvar = torch.chunk(encoded, 2, dim=1)
         mu = self.core.q_z_mean(h)
         logvar = self.core.q_z_var(h)
-        q, z = self.reparameterize(mu, logvar)
+        q, z = reparameterize(mu, logvar)
         zs_q = [z]
 
         # Prior
@@ -243,14 +240,14 @@ class GatedRecurrentSBP(RecurrentSBP):
                 torch.cat([h, zs_q[-1]], dim=1).view(1, batch, -1), q_state)
             q_encoded = self.posterior_linear(q_lstm.view(batch, -1))
             q_mu, q_logvar = torch.chunk(q_encoded, 2, dim=1)
-            q, z_q = self.reparameterize(q_mu, q_logvar)
+            q, z_q = reparameterize(q_mu, q_logvar)
 
             # Prior
             p_lstm, state = self.prior_lstm(zs_q[-1].view(1, batch, -1),
                                             p_state)
             p_encoded = self.prior_linear(p_lstm.view(batch, -1))
             p_mu, p_logvar = torch.chunk(p_encoded, 2, dim=1)
-            p, z_p = self.reparameterize(p_mu, p_logvar)
+            p, z_p = reparameterize(p_mu, p_logvar)
 
             zs_q.append(z_q)
             kl.append(kl_divergence(q, p).view(batch, -1, 1, 1))
@@ -272,6 +269,6 @@ class GatedRecurrentSBP(RecurrentSBP):
             log_ms.append(log_ss[-1] + log_m)
             log_ss.append(log_ss[-1] + log_neg_m)
         # pi_K
-        log_neg_m = log_ss[-1] + F.logsigmoid(decoded_zs[-1])
+        log_neg_m = log_ss[-1]
         log_ms.append(log_neg_m)
         return log_ms, kl
