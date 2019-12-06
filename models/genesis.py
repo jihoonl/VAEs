@@ -37,10 +37,10 @@ class Genesis(nn.Module):
         x_mu_k, kl_c = self.component_vae(x, log_ms_k)
         #print('Comp VAE: ', t.toc())
         t.tic()
-        ms_k = torch.stack(log_ms_k, dim=4).exp()
+        log_ms_k = torch.stack(log_ms_k, dim=4)
 
-        recon_k = ms_k * x_mu_k
+        recon_k = log_ms_k.exp() * x_mu_k
         recon = recon_k.sum(dim=4)
         #print('Remain VAE: ', t.toc())
 
-        return recon, recon_k, x_mu_k, ms_k, kl_m, kl_c
+        return recon, recon_k, x_mu_k, log_ms_k, kl_m, kl_c
