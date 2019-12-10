@@ -145,10 +145,21 @@ def main():
     if not args.no_quantization:
         q = Quantization(device=device)
     else:
-        q = Range()
+        q = Dummy()
 
-    def get_recon_error(recon, x, sigma):
-        ll = Normal(recon, sigma).log_prob(x)
+    sigma_default = args.sigma * torch.ones(1, 1, 1, 1, args.layers)
+    if use_gpu:
+        sigma_default = sigma_default.cuda()
+    else:
+        sigma_default = sigma_default.cpu()
+    #sigma_default = args.sigma
+
+    def get_recon_error(x, sigma, x_mu_k, log_ms_k, recon):
+        n = Normal(x_mu_k, sigma)
+        log_x_mu = n.log_prob(x.unsqueeze(4))
+        log_mx = log_x_mu + log_ms_k
+        ll = torch.log(log_mx.exp().sum(dim=4))
+        #ll = Normal(recon, sigma).log_prob(x)
         #ll = Bernoulli(recon).log_prob(x)
         return -ll.sum(dim=[1, 2, 3]).mean()
 
@@ -158,9 +169,9 @@ def main():
         x = x.to(device)
         x = q.preprocess(x)
 
-        recon, recon_k, x_mu_k, ms_k, kl_m, kl_c = model(x)
+        recon, recon_k, x_mu_k, log_ms_k, kl_m, kl_c = model(x)
 
-        nll = get_recon_error(recon, x, args.sigma)
+        nll = get_recon_error(x, sigma_default, x_mu_k, log_ms_k, recon)
         kl_m = kl_m.sum(dim=[1, 2, 3, 4]).mean()
         kl_c = kl_c.sum(dim=[1, 2, 3, 4]).mean()
         optimizer.zero_grad()
@@ -239,9 +250,11 @@ def main():
             for i, (x, _) in enumerate(test_loader):
                 x = x.to(device)
                 x_processed = q.preprocess(x)
-                recon_processed, recon_k_processed, x_mu_k, ms_k, kl_m, kl_c = model(
+                recon_processed, recon_k_processed, x_mu_k, log_ms_k, kl_m, kl_c = model(
                     x_processed)
-                nll = get_recon_error(recon_processed, x_processed, args.sigma)
+                # nll = get_recon_error(recon_processed, x_processed, args.sigma)
+                nll = get_recon_error(x_processed, sigma_default, x_mu_k,
+                                      log_ms_k, recon_processed)
                 kl_m = kl_m.sum(dim=[1, 2, 3, 4]).mean()
                 kl_c = kl_c.sum(dim=[1, 2, 3, 4]).mean()
                 loss = nll + beta * (kl_m + kl_c)
@@ -269,15 +282,25 @@ def main():
                                               recon_k_processed):
                         cat.extend([x1, mu1])
                         cat.extend(mu1_k.permute(3, 0, 1, 2))
-                        if len(cat) > max_col * 3:
+                        if len(cat) > (max_col * 10):
                             break
                     cat = torch.stack(cat)
-                    if cat.shape[0] > max_col * 3:
-                        cat = cat[:max_col * 3]
+                    #if cat.shape[0] > max_col * 3:
+                    #    cat = cat[:max_col * 3]
                     cat = q.postprocess(cat)
                     writer.add_image(
-                        'val/layers',
-                        make_grid(cat.detach().cpu().float(), nrow=max_col),
+                        'val/layers', make_grid(cat.detach().cpu(),
+                                                nrow=max_col),
+                        engine.state.iteration)
+                    cat2 = []
+                    for l in log_ms_k:
+                        cat2.extend(l.exp().permute(3, 0, 1, 2))
+                        if len(cat2) > (max_col * 10):
+                            break
+                    cat2 = torch.stack(cat2)
+                    writer.add_image(
+                        'val/masks',
+                        make_grid(cat2.detach().cpu(), nrow=args.layers),
                         engine.state.iteration)
             val_elbo /= len(test_loader)
             val_kl_m /= len(test_loader)
