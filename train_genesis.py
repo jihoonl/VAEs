@@ -145,7 +145,7 @@ def main():
     if not args.no_quantization:
         q = Quantization(device=device)
     else:
-        q = Dummy()
+        q = Range()
 
     sigma_default = args.sigma * torch.ones(1, 1, 1, 1, args.layers)
     if use_gpu:
