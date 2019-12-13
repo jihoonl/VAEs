@@ -145,9 +145,9 @@ def main():
     if not args.no_quantization:
         q = Quantization(device=device)
     else:
-        q = Range()
+        q = Dummy()
 
-    sigma_default = args.sigma * torch.ones(1, 1, 1, 1, args.layers)
+    sigma_default = args.sigma * torch.ones(1, args.layers, 1, 1, 1)
     if use_gpu:
         sigma_default = sigma_default.cuda()
     else:
@@ -156,9 +156,9 @@ def main():
 
     def get_recon_error(x, sigma, x_mu_k, log_ms_k, recon):
         n = Normal(x_mu_k, sigma)
-        log_x_mu = n.log_prob(x.unsqueeze(4))
+        log_x_mu = n.log_prob(x.unsqueeze(1))
         log_mx = log_x_mu + log_ms_k
-        ll = torch.log(log_mx.exp().sum(dim=4))
+        ll = torch.log(log_mx.exp().sum(dim=1))
         #ll = Normal(recon, sigma).log_prob(x)
         #ll = Bernoulli(recon).log_prob(x)
         return -ll.sum(dim=[1, 2, 3]).mean()
@@ -281,7 +281,7 @@ def main():
                     for x1, mu1, mu1_k in zip(x_processed, recon_processed,
                                               recon_k_processed):
                         cat.extend([x1, mu1])
-                        cat.extend(mu1_k.permute(3, 0, 1, 2))
+                        cat.extend(mu1_k)
                         if len(cat) > (max_col * 10):
                             break
                     cat = torch.stack(cat)
@@ -294,7 +294,7 @@ def main():
                         engine.state.iteration)
                     cat2 = []
                     for l in log_ms_k:
-                        cat2.extend(l.exp().permute(3, 0, 1, 2))
+                        cat2.extend(l.exp())
                         if len(cat2) > (max_col * 10):
                             break
                     cat2 = torch.stack(cat2)

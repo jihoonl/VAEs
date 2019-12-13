@@ -20,29 +20,34 @@ class TowerRecurrentSBP(nn.Module):
 
     def __init__(self, d, h, w, zdim, hdim, *args, **kwargs):
         super().__init__()
-        self.core = TowerVAE(d, h, w, zdim, hdim, odim=1, *args, **kwargs)
+        self.core = TowerVAE(d,
+                             h,
+                             w,
+                             zdim,
+                             hdim,
+                             odim=1,
+                             batch_norm=True,
+                             *args,
+                             **kwargs)
 
         #self.posterior_lstm = nn.LSTM(zdim + hdim, zdim * 2)
         #self.posterior_linear = nn.Linear(zdim * 2, zdim * 2)
-        self.posterior_lstm = Conv2dLSTMCell(zdim + hdim,
-                                             zdim * 2,
+        self.posterior_lstm = Conv2dLSTMCell(hdim + hdim,
+                                             hdim,
                                              kernel_size=5,
                                              stride=1,
                                              padding=2)
-        self.posterior_linear = nn.Conv2d(zdim * 2,
+        self.posterior_linear = nn.Conv2d(hdim,
                                           zdim * 2,
                                           kernel_size=1,
                                           stride=1)
 
         self.prior_lstm = Conv2dLSTMCell(zdim,
-                                         zdim * 2,
+                                         hdim,
                                          kernel_size=5,
                                          stride=1,
                                          padding=2)
-        self.prior_linear = nn.Conv2d(zdim * 2,
-                                      zdim * 2,
-                                      kernel_size=1,
-                                      stride=1)
+        self.prior_linear = nn.Conv2d(hdim, zdim * 2, kernel_size=1, stride=1)
 
     def forward(self, x, K):
         batch, *xdims = x.shape

@@ -89,6 +89,6 @@ class ComponentVAE(nn.Module):
         # Decode
         z = q.rsample()
         x_mu = self.decoder(z)
-        x_mu_k = torch.stack(torch.chunk(x_mu, K, dim=0), dim=4)
+        x_mu_k = torch.stack(torch.chunk(x_mu, K, dim=0), dim=1)
 
         return x_mu_k, kl_k
