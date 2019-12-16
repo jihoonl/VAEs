@@ -4,14 +4,14 @@ from torch import nn
 from torch.distributions import Normal, kl_divergence
 
 from .vae import BaseEncoder, BaseDecoder, VAE, TowerVAE
-from .conv_draw import Conv2dLSTMCell
+from .conv_lstm import Conv2dLSTMCell
 from .timer import Timer
 from .modules.sylvester_vae import VAE as SylvesterVAE
 
 
 def reparameterize(mu, logstd):
     q = Normal(mu, logstd.sigmoid() * 0.99 + 0.01)
-    # q = Normal(mu, F.softplus(logstd + 0.5) + 1e-8)
+    #q = Normal(mu, F.softplus(logstd + 0.5) + 1e-8)
     z = q.rsample()
     return q, z
 
@@ -20,23 +20,14 @@ class TowerRecurrentSBP(nn.Module):
 
     def __init__(self, d, h, w, zdim, hdim, *args, **kwargs):
         super().__init__()
-        self.core = TowerVAE(d,
-                             h,
-                             w,
-                             zdim,
-                             hdim,
-                             odim=1,
-                             batch_norm=True,
-                             *args,
-                             **kwargs)
+        self.core = TowerVAE(d, h, w, zdim, hdim, odim=1, *args, **kwargs)
 
-        #self.posterior_lstm = nn.LSTM(zdim + hdim, zdim * 2)
-        #self.posterior_linear = nn.Linear(zdim * 2, zdim * 2)
         self.posterior_lstm = Conv2dLSTMCell(hdim + hdim,
                                              hdim,
                                              kernel_size=5,
                                              stride=1,
-                                             padding=2)
+                                             padding=2,
+                                             use_bn=True)
         self.posterior_linear = nn.Conv2d(hdim,
                                           zdim * 2,
                                           kernel_size=1,
@@ -46,61 +37,62 @@ class TowerRecurrentSBP(nn.Module):
                                          hdim,
                                          kernel_size=5,
                                          stride=1,
-                                         padding=2)
+                                         padding=2,
+                                         use_bn=True)
         self.prior_linear = nn.Conv2d(hdim, zdim * 2, kernel_size=1, stride=1)
+
+        self.hdim = hdim
 
     def forward(self, x, K):
         batch, *xdims = x.shape
-        kl = 0
+        hdim = self.hdim
 
         t = Timer()
 
         # Posterior
         t.tic()
         h = self.core.encoder.stem(x)
-        encoded = self.core.encoder.gaussian(h)
-        mu, logvar = torch.chunk(encoded, 2, dim=1)
-        q, z = reparameterize(mu, logvar)
-        zs_q = [z]
-
-        # Prior
-        p = Normal(0, 1)
-
-        # First layer kl divergence
-        kl = []
-        kl.append(kl_divergence(q, p))
 
         # z^m encoding step
-        batch, zdim, *shape = z.shape
-        c_q = x.new_zeros((batch, zdim * 2, *shape))
-        h_q = x.new_zeros((batch, zdim * 2, *shape))
+        _, hidden_dim, *hidden_row_col_size = h.shape
+        assert hdim == hidden_dim
+        c_q = x.new_zeros((batch, hdim, *hidden_row_col_size))
+        h_q = x.new_zeros((batch, hdim, *hidden_row_col_size))
 
-        c_p = x.new_zeros((batch, zdim * 2, *shape))
-        h_p = x.new_zeros((batch, zdim * 2, *shape))
+        c_p = x.new_zeros((batch, hdim, *hidden_row_col_size))
+        h_p = x.new_zeros((batch, hdim, *hidden_row_col_size))
         """
         Genesis Eq - 1
         p_{\theta}(z^m_{1:K}) =
             \prod^K_{k=1}p_{\theta}(z^m_k|u_k)|_u_k=R_\theta(z^m_{k-1},u_{k-1})
         """
         t.tic()
-        for s in range(K - 1):
-            # Posterior
-            c_q, h_q = self.posterior_lstm(torch.cat([h, zs_q[-1]], dim=1),
+        zs_q = []
+        kl = []
+        for s in range(K):
+            # Prior dist
+            p_encoded = self.prior_linear(h_p)
+            p_mu, p_logstd = torch.chunk(p_encoded, 2, dim=1)
+            p, z_q = reparameterize(p_mu, p_logstd)
+
+            # Posterior rnn
+            c_q, h_q = self.posterior_lstm(torch.cat([h, h_p], dim=1),
                                            (c_q, h_q))
+
+            # Posterior dist
             q_encoded = self.posterior_linear(h_q)
+
+            # Posterior sample
             q_mu, q_logvar = torch.chunk(q_encoded, 2, dim=1)
             q, z_q = reparameterize(q_mu, q_logvar)
 
-            # Prior
-            c_p, h_p = self.prior_lstm(zs_q[-1], (c_p, h_p))
-            p_encoded = self.prior_linear(h_p)
-            p_mu, p_logvar = torch.chunk(p_encoded, 2, dim=1)
-            p, z_p = reparameterize(p_mu, p_logvar)
+            # Prior rnn
+            c_p, h_p = self.prior_lstm(z_q, (c_p, h_p))
 
             zs_q.append(z_q)
             kl.append(kl_divergence(q, p))
         t.tic()
-        kl = torch.stack(kl, dim=4)
+        kl = torch.stack(kl, dim=1)
 
         # Parallelized decoding of z^m
         zs_q = torch.cat(zs_q, dim=0)
@@ -118,7 +110,7 @@ class TowerRecurrentSBP(nn.Module):
             log_ms.append(log_ss[-1] + log_m)
             log_ss.append(log_ss[-1] + log_neg_m)
         # pi_K
-        log_neg_m = log_ss[-1] + F.logsigmoid(decoded_zs[-1])
+        log_neg_m = log_ss[-1]
         log_ms.append(log_neg_m)
         return log_ms, kl
 
@@ -186,7 +178,7 @@ class GatedRecurrentSBP(nn.Module):
             # Update kl divergence
             kl.append(kl_divergence(q, p).view(batch, -1, 1, 1))
 
-        kl = torch.stack(kl, dim=4)
+        kl = torch.stack(kl, dim=1)
 
         # Parallelized decoding of z^m
         zs_q = torch.cat(zs_q, dim=0)
