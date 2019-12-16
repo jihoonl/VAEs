@@ -84,7 +84,7 @@ class ComponentVAE(nn.Module):
         # KL(q(z^c|x,z^m)|| p(z^c|z^m))
         kl_all = kl_divergence(q, p)
         kl = torch.chunk(kl_all, K, dim=0)
-        kl_k = torch.stack(torch.chunk(kl_all, K, dim=0), dim=4)
+        kl_k = torch.stack(torch.chunk(kl_all, K, dim=0), dim=1)
 
         # Decode
         z = q.rsample()
