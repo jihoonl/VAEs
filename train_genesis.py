@@ -144,6 +144,7 @@ def main():
 
     if not args.no_quantization:
         q = Quantization(device=device)
+        raise NotImplementedError('It is using sigmoid now')
     else:
         q = Dummy()
 
@@ -295,7 +296,7 @@ def main():
                     cat2 = []
                     for l in log_ms_k:
                         cat2.extend(l.exp())
-                        if len(cat2) > (max_col * 10):
+                        if len(cat2) > (args.layers * 10):
                             break
                     cat2 = torch.stack(cat2)
                     writer.add_image(
