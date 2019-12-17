@@ -59,5 +59,5 @@ class SpatialBroadcastDecoder(nn.Module):
         out = F.elu(self.conv2(out))
         out = F.elu(self.conv3(out))
         out = F.elu(self.conv4(out))
-        out = torch.sigmoid(self.conv5(out))
+        out = torch.tanh(self.conv5(out))
         return out

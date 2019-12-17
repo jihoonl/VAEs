@@ -65,7 +65,9 @@ class TowerEncoder(nn.Module):
             nn.ReLU(inplace=True))
 
         self.conv7 = nn.Sequential(
-            nn.Conv2d(hdim, zdim * 2, kernel_size=1, stride=1, bias=not use_bn))
+            nn.Conv2d(hdim, zdim * 2, kernel_size=1, stride=1, bias=not use_bn),
+            nn.BatchNorm2d(num_features=hdim) if use_bn else nn.Identity(),
+            nn.Sigmoid())
 
     def forward(self, x):
         out = self.stem(x)

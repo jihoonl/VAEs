@@ -144,9 +144,9 @@ def main():
 
     if not args.no_quantization:
         q = Quantization(device=device)
-        raise NotImplementedError('It is using sigmoid now')
+        # raise NotImplementedError('It is using sigmoid now')
     else:
-        q = Dummy()
+        q = Range()
 
     sigma_default = args.sigma * torch.ones(1, args.layers, 1, 1, 1)
     if use_gpu:
@@ -156,8 +156,9 @@ def main():
     #sigma_default = args.sigma
 
     def get_recon_error(x, sigma, x_mu_k, log_ms_k, recon):
+        batch, *xdims = x.shape
         n = Normal(x_mu_k, sigma)
-        log_x_mu = n.log_prob(x.unsqueeze(1))
+        log_x_mu = n.log_prob(x.view(batch, 1, *xdims))
         log_mx = log_x_mu + log_ms_k
         ll = torch.log(log_mx.exp().sum(dim=1))
         #ll = Normal(recon, sigma).log_prob(x)

@@ -20,7 +20,15 @@ class TowerRecurrentSBP(nn.Module):
 
     def __init__(self, d, h, w, zdim, hdim, *args, **kwargs):
         super().__init__()
-        self.core = TowerVAE(d, h, w, zdim, hdim, odim=1, *args, **kwargs)
+        self.core = TowerVAE(d,
+                             h,
+                             w,
+                             zdim,
+                             hdim,
+                             odim=1,
+                             use_bn=True,
+                             *args,
+                             **kwargs)
 
         self.posterior_lstm = Conv2dLSTMCell(hdim + hdim,
                                              hdim,
