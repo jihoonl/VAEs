@@ -304,6 +304,17 @@ def main():
                         'val/masks',
                         make_grid(cat2.detach().cpu(), nrow=args.layers),
                         engine.state.iteration)
+                    cat3 = []
+                    for l in x_mu_k:
+                        cat3.extend(l)
+                        if len(cat3) > (args.layers * 10):
+                            break
+                    cat3 = torch.stack(cat3)
+                    cat3 = q.postprocess(cat3)
+                    writer.add_image(
+                        'val_comp/comp',
+                        make_grid(cat3.detach().cpu(), nrow=args.layers),
+                        engine.state.iteration)
             val_elbo /= len(test_loader)
             val_kl_m /= len(test_loader)
             val_kl_c /= len(test_loader)
