@@ -153,7 +153,6 @@ def main():
         sigma_default = sigma_default.cuda()
     else:
         sigma_default = sigma_default.cpu()
-    #sigma_default = args.sigma
 
     def get_recon_error(x, sigma, x_mu_k, log_ms_k, recon):
         batch, *xdims = x.shape
@@ -161,8 +160,6 @@ def main():
         log_x_mu = n.log_prob(x.view(batch, 1, *xdims))
         log_mx = log_x_mu + log_ms_k
         ll = torch.log(log_mx.exp().sum(dim=1))
-        #ll = Normal(recon, sigma).log_prob(x)
-        #ll = Bernoulli(recon).log_prob(x)
         return -ll.sum(dim=[1, 2, 3]).mean()
 
     def step(engine, batch):
@@ -254,7 +251,6 @@ def main():
                 x_processed = q.preprocess(x)
                 recon_processed, recon_k_processed, x_mu_k, log_ms_k, kl_m, kl_c = model(
                     x_processed)
-                # nll = get_recon_error(recon_processed, x_processed, args.sigma)
                 nll = get_recon_error(x_processed, sigma_default, x_mu_k,
                                       log_ms_k, recon_processed)
                 kl_m = kl_m.sum(dim=[1, 2, 3, 4]).mean()
@@ -267,53 +263,32 @@ def main():
                 val_kl_c += kl_c
                 val_nll += nll
                 if i == 0:
-                    """
-                    batch, *xdims = x.shape
-                    row = 8
-                    n = min(x.shape[0], row)
-                    comparison = torch.cat([x[:n], recon[:n]])
-                    grid = make_grid(comparison.detach().cpu().float(),
-                                     nrow=row)
-                    writer.add_image('val/reconstruction', grid,
-                                     engine.state.iteration)
-                    """
-
                     cat = []
-                    max_col = args.layers + 2
-                    for x1, mu1, mu1_k in zip(x_processed, recon_processed,
-                                              recon_k_processed):
-                        cat.extend([x1, mu1])
+                    max_col = (args.layers + 2)
+                    for x1, mu1, mu1_k, l_k, c_k in zip(x_processed,
+                                                        recon_processed,
+                                                        recon_k_processed,
+                                                        log_ms_k, x_mu_k):
+                        # What a lazy way..
+                        cat.extend([x1, mu1])  # Recon per layer
                         cat.extend(mu1_k)
-                        if len(cat) > (max_col * 10):
+                        cat.extend(x1.new_zeros([2, 3, 64,
+                                                 64]))  # Masks per layer
+                        cat.extend(
+                            q.preprocess(l_k.exp().expand(
+                                args.layers, 3, 64, 64)))
+                        cat.extend(x1.new_zeros([2, 3, 64,
+                                                 64]))  #  components per layer
+                        cat.extend(c_k)
+                        if len(cat) > (max_col * 7 * 3):
                             break
                     cat = torch.stack(cat)
                     #if cat.shape[0] > max_col * 3:
                     #    cat = cat[:max_col * 3]
                     cat = q.postprocess(cat)
                     writer.add_image(
-                        'val/layers', make_grid(cat.detach().cpu(),
-                                                nrow=max_col),
-                        engine.state.iteration)
-                    cat2 = []
-                    for l in log_ms_k:
-                        cat2.extend(l.exp())
-                        if len(cat2) > (args.layers * 10):
-                            break
-                    cat2 = torch.stack(cat2)
-                    writer.add_image(
-                        'val/masks',
-                        make_grid(cat2.detach().cpu(), nrow=args.layers),
-                        engine.state.iteration)
-                    cat3 = []
-                    for l in x_mu_k:
-                        cat3.extend(l)
-                        if len(cat3) > (args.layers * 10):
-                            break
-                    cat3 = torch.stack(cat3)
-                    cat3 = q.postprocess(cat3)
-                    writer.add_image(
-                        'val_comp/comp',
-                        make_grid(cat3.detach().cpu(), nrow=args.layers),
+                        '{}/layers'.format(args.dataset),
+                        make_grid(cat.detach().cpu(), nrow=max_col),
                         engine.state.iteration)
             val_elbo /= len(test_loader)
             val_kl_m /= len(test_loader)

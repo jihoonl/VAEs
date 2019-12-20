@@ -58,7 +58,8 @@ def gqn(name, data_root, batch_size):
                                name,
                                'train',
                                use_cache=use_cache,
-                               length=batch_size * 1024)  # * 4
+                               #length=batch_size * 4)
+                               length=batch_size * 1024)
     data['test'] = GQNDataset(gqn_root,
                               name,
                               'test',

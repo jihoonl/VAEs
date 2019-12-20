@@ -17,7 +17,8 @@ class Genesis(nn.Module):
 
         self.mask_vae = TowerRecurrentSBP(d, h, w, zdim, hdim, *args, **kwargs)
         # self.mask_vae = GatedRecurrentSBP(d, h, w, zdim, hdim, *args, **kwargs)
-        self.component_vae = ComponentVAE(d, h, w, zdim, hdim, *args, **kwargs)
+        self.component_vae = ComponentVAE(d, h, w, zdim * 2, hdim * 2, *args,
+                                          **kwargs)
 
     def forward(self, x):
         """
