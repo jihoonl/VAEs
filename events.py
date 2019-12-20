@@ -4,8 +4,9 @@ from ignite.engine import Events
 from ignite.handlers import ModelCheckpoint
 
 def log_metrics(engine, writer, interval):
-    for k, v in engine.state.metrics.items():
-        writer.add_scalar('training/{}'.format(k), v, engine.state.iteration)
+    if engine.state.iteration % interval == 0:
+        for k, v in engine.state.metrics.items():
+            writer.add_scalar('training/{}'.format(k), v, engine.state.iteration)
 
 
 def add_events(trainer, model, writer, logdir, interval):

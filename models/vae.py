@@ -27,6 +27,8 @@ class BaseDecoder(nn.Module):
 
     def __init__(self, d, h, w, zdim, hdim, *args, **kwargs):
         super().__init__()
+        if 'odim' in kwargs:
+            d = kwargs['odim']
         self.decoder1 = nn.Linear(zdim, hdim)
         self.decoder2 = nn.Linear(hdim, d * w * h)
         self.x_shape = (d, h, w)
@@ -88,7 +90,6 @@ class TowerVAE(AbstractVAE):
 
     def __init__(self, *args, **kwargs):
         super().__init__()
-
         # Encoder
         self.encoder = TowerEncoder(*args, **kwargs)
         self.decoder = TowerDecoder(*args, **kwargs)

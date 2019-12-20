@@ -4,7 +4,7 @@ from datasets.clevr import CLEVRVAE
 from datasets.gqn import GQNDataset, DATASETS as GQNDATASETS
 
 
-def mnist(data_root):
+def mnist(data_root, batch_size):
     data = {}
     data['train'] = datasets.MNIST(data_root,
                                    train=True,
@@ -17,7 +17,7 @@ def mnist(data_root):
     return data
 
 
-def cifar10(data_root):
+def cifar10(data_root, batch_size):
     data = {}
     data['train'] = datasets.CIFAR10(data_root,
                                      train=True,
@@ -30,7 +30,7 @@ def cifar10(data_root):
     return data
 
 
-def svhn(data_root):
+def svhn(data_root, batch_size):
     data = {}
     data['train'] = datasets.SVHN(data_root,
                                   split='train',
@@ -43,10 +43,10 @@ def svhn(data_root):
     return data
 
 
-def clevr(data_root):
+def clevr(data_root, batch_size):
     data = {}
-    data['train'] = CLEVRVAE(mode='train', length=128 * 1024)
-    data['test'] = CLEVRVAE(mode='test', length=128 * 6)
+    data['train'] = CLEVRVAE(mode='train', length=batch_size * 1024)
+    data['test'] = CLEVRVAE(mode='test', length=batch_size)
     return data
 
 
@@ -54,12 +54,16 @@ def gqn(name, data_root, batch_size):
     use_cache = True
     gqn_root = '/data/public/rw/datasets/gqn/torch'
     data = {}
-    data['train'] = GQNDataset(gqn_root, name, 'train', use_cache=use_cache, length=batch_size * 1024)
+    data['train'] = GQNDataset(gqn_root,
+                               name,
+                               'train',
+                               use_cache=use_cache,
+                               length=batch_size * 1024)  # * 4
     data['test'] = GQNDataset(gqn_root,
                               name,
                               'test',
                               use_cache=use_cache,
-                              length=batch_size * 6)
+                              length=batch_size)
     return data
 
 
@@ -74,7 +78,7 @@ dataset_pool = {
 def get_dataset(name, data_root, batch_size):
 
     if name in dataset_pool.keys():
-        return dataset_pool[name](data_root)
+        return dataset_pool[name](data_root, batch_size)
     elif name in GQNDATASETS:
         return gqn(name, data_root, batch_size)
     else:
